@@ -961,6 +961,8 @@ function loadDeck(id){const s=findSave(id);if(!s)return;
 function deleteDeck(id){SAVES=SAVES.filter(s=>s.id!==id);if(S.saveId===id)S.saveId=null;saveS();persistSaves()}
 // Il Mazzo attuale è diverso dalla sua versione salvata?
 function deckDirty(){syncLay();const s=findSave(S.saveId);return !s||JSON.stringify(deckPart(S))!==JSON.stringify(deckPart(s))}
+// Carte del Mazzo che un nuovo kit cancellerebbe: 0 se il Mazzo è vuoto o salvato così com'è (si ritrova in «Mazzi salvati»).
+function kitLoss(){const n=S.deck.length+Object.values(S.basics||{}).reduce((a,b)=>a+b,0);return n&&deckDirty()?n:0}
 // s: punteggio di un Match finito (matchScore); sign -1 quando si annulla.
 function deckStat(id,s,sign){const d=findSave(id);if(!d)return;const t=d.st;t[s.won?'mw':'ml']+=sign;t.gw+=sign*s.w;t.gl+=sign*s.l;persistSaves()}
 function exportDeck(id){const s=findSave(id);const {st,...rest}=s;const bytes=new TextEncoder().encode(JSON.stringify(rest));
@@ -1027,7 +1029,15 @@ function renderOpen(){
   $('#next')&&($('#next').onclick=()=>{S.opened++;S.viewB=own0+S.opened-1;S._anim=S.viewB;saveS();renderOpen()});
   $('#all')&&($('#all').onclick=()=>{S.opened=nOwn;S.viewB=own0+nOwn-1;S._anim=S.viewB;saveS();renderOpen()});
   $('#todeck').onclick=()=>{S.opened=nOwn;saveS();go('deck')};
-  const load=(code,msg)=>{freshKit(code);S._anim=S.viewB;const tm=timerNewKit();renderOpen();toast(msg+S.seed+(tm?' · timer avviato':''))};
+  const open_=(code,msg)=>{freshKit(code);S._anim=S.viewB;const tm=timerNewKit();renderOpen();toast(msg+S.seed+(tm?' · timer avviato':''))};
+  // Un kit nuovo sostituisce il Pool e svuota il Mazzo: se il Mazzo non è salvato si chiede prima (niente confirm(), che nell'Artifact è bloccato).
+  const load=(code,msg)=>{const n=kitLoss();if(!n){open_(code,msg);return}
+    openModal('Il tuo Mazzo non è salvato',m=>{
+      m.innerHTML=`<p style="margin-top:0">Hai un Mazzo di ${n} carte non salvato: aprendo un altro kit si perde. La Partita in corso sul Tavolo non cambia.</p>
+        <div class="row" style="justify-content:flex-end;gap:8px"><button class="btn" id="kl-no">Annulla</button><button class="btn warm" id="kl-go">Apri senza salvare</button><button class="btn pri" id="kl-save">Salva e apri il kit</button></div>`;
+      $('#kl-no').onclick=closeModal;
+      $('#kl-go').onclick=()=>{closeModal();open_(code,msg)};
+      $('#kl-save').onclick=()=>{saveDeck();closeModal();open_(code,msg)}})};
   publish();
   $('#newkit').onclick=()=>load(newSeed(team),'Nuovo kit: ');
   el.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{if(+b.dataset.kind!==team)load(newSeed(+b.dataset.kind),'Nuovo kit: ')});
