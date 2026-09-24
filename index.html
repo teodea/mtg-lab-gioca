@@ -1309,16 +1309,19 @@ function savesModal(){let armed=null;
     $('#svover')&&($('#svover').onclick=()=>{saveDeck();toast('Salvato: '+findSave(S.saveId).name);draw_()});
     $('#svimp').onclick=()=>{try{importDeck($('#svcode').value);toast('Mazzo importato');draw_()}catch(e){toast('Codice non valido')}}};
   draw_()},()=>{if(VIEW==='deck')renderDeck()})}
-// Il Mazzo per Forge: file .dck da scaricare, o il testo da copiare se il download non parte (l'Artifact può bloccarlo).
-function forgeModal(){syncLay();const byU=poolByU();const cur=findSave(S.saveId);
-  const name=cur?cur.name:(deckColors(S.pool,S.deck).join('')+' '+S.seed).trim();
-  const t=forgeDck(name,deckList(),pileOrder('side').map(u=>byU[u]).filter(Boolean));
+// Il Mazzo per Forge: file .dck da scaricare, o il testo da copiare.
+// Nell'Artifact il file passa dalla capability downloads, che non accetta l'estensione .dck: si salva un .txt da rinominare.
+let dlCap;const downloadsCap=()=>dlCap??=(async()=>{try{return window.claude&&await window.claude.use('downloads')||null}catch(e){return null}})();
+async function forgeModal(){syncLay();const byU=poolByU();const cur=findSave(S.saveId);
+  const name=cur?cur.name:(deckColors(S.pool,S.deck).join('')+' '+S.seed).trim();const base=name.replace(/[\\/:*?"<>|]+/g,' ').trim()||'Mazzo';
+  const t=forgeDck(name,deckList(),pileOrder('side').map(u=>byU[u]).filter(Boolean));const dl=await downloadsCap();
   openModal('Esporta per Forge',m=>{m.innerHTML=`<p class="muted" style="margin-top:0;font-size:12.5px">Mazzo e Sideboard nel formato di Forge. Reality Fracture c'è solo nelle <b>daily snapshot</b> di Forge, non ancora nella versione stabile; le carte che Forge non ha ancora vengono saltate.</p>
-    <ol class="muted" style="font-size:12.5px;padding-left:18px"><li>Salva il file in <code>%APPDATA%\\Forge\\decks\\constructed</code> (su Windows).</li><li>In Forge, nelle Preferenze, disattiva <b>Conformità del mazzo</b> (Deck Conformance): altrimenti vuole almeno 60 carte.</li><li>Scegli il Mazzo in una partita Constructed, contro l'IA o in rete.</li></ol>
-    <div class="row"><button class="btn pri" id="fgdl">Scarica il file .dck</button><button class="btn" id="fgcp">Copia il testo</button></div>
+    <ol class="muted" style="font-size:12.5px;padding-left:18px">${dl?`<li>Scarica il file: arriva come <code>${esc(base)}.txt</code>. Rinominalo in <code>${esc(base)}.dck</code> (in Esplora file attiva Visualizza → Estensioni nomi file, altrimenti diventa <code>.dck.txt</code>).</li><li>Mettilo in`:'<li>Salva il file in'} <code>%APPDATA%\\Forge\\decks\\constructed</code> (su Windows).</li><li>In Forge, nelle Preferenze, disattiva <b>Conformità del mazzo</b> (Deck Conformance): altrimenti vuole almeno 60 carte.</li><li>Scegli il Mazzo in una partita Constructed, contro l'IA o in rete.</li></ol>
+    <div class="row"><button class="btn pri" id="fgdl">${dl?'Scarica il file (.txt)':'Scarica il file .dck'}</button><button class="btn" id="fgcp">Copia il testo</button></div>
     <textarea readonly style="width:100%;min-height:220px;margin-top:10px;background:var(--felt2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px;font:12px var(--mono)">${esc(t)}</textarea>`;
-    $('#fgdl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain'}));
-      a.download=(name.replace(/[\\/:*?"<>|]+/g,' ').trim()||'Mazzo')+'.dck';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+    $('#fgdl').onclick=()=>{if(dl){dl.save({filename:base+'.txt',data:t}).then(()=>toast(`Salvato: rinominalo in ${base}.dck`),e=>{if(e?.code!=='declined')toast('Download non riuscito: usa «Copia il testo»')});return}
+      const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain'}));
+      a.download=base+'.dck';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
     $('#fgcp').onclick=()=>{const ta=m.querySelector('textarea');try{navigator.clipboard.writeText(t).then(()=>toast('Testo copiato'),()=>ta.select())}catch(e){ta.select()}}})}
 function showText(t){openModal('Lista del Mazzo',m=>{m.innerHTML=`<textarea readonly style="width:100%;min-height:300px;background:var(--felt2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px;font:12px var(--mono)">${esc(t)}</textarea>`;m.querySelector('textarea').select()})}
 
