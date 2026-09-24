@@ -1528,7 +1528,10 @@ function renderModebar(){
   mb.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{if(G.mode===b.dataset.m)return;G.mode=b.dataset.m;if(G.mode==='bot'&&G.me&&!G.bot){startGame();return}commit()});
   $('#nick')&&($('#nick').onchange=e=>{S.nick=e.target.value.trim();saveS();if(G.me)G.me.name=S.nick||'Tu';commit()});
   // Versione web: la stanza è nel link, che si manda all'amico (su claude.ai la stanza è l'Artifact stesso).
-  $('#invite')&&($('#invite').onclick=()=>navigator.clipboard.writeText(ROOM.link).then(()=>toast('Link copiato: mandalo al tuo amico'),()=>prompt('Copia il link e mandalo al tuo amico',ROOM.link)));
+  // Se il browser nega gli appunti, il link si mostra già selezionato.
+  $('#invite')&&($('#invite').onclick=()=>navigator.clipboard.writeText(ROOM.link).then(()=>toast('Link copiato: mandalo al tuo amico'),()=>openModal('Link della stanza',m=>{
+    m.innerHTML=`<p class="muted" style="margin-top:0">Copialo e mandalo al tuo amico: chi lo apre entra in questa stanza.</p><input type="text" readonly value="${esc(ROOM.link)}" style="width:100%">`;
+    const i=m.querySelector('input');setTimeout(()=>{i.focus();i.select()})})));
   $('#opsel')&&($('#opsel').onchange=e=>{oppPeer=e.target.value||null;oppPicked=!!oppPeer;const c=roomPeers.find(p=>p.peer===oppPeer);OPP=c?c.presence.g:null;renderOppOnly()});
   $('#ng')&&($('#ng').onclick=nextGameModal);
   $('#endg')&&($('#endg').onclick=()=>{const r=$('#endg').getBoundingClientRect();const done=fn=>()=>{fn();nextGameModal()};
