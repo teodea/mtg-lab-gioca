@@ -235,7 +235,9 @@ details>summary{cursor:pointer}
 .pile .cnt{position:absolute;right:-4px;bottom:-4px;font:600 11px var(--mono);background:var(--ground);border:1px solid var(--line);border-radius:4px;padding:0 4px}
 .pile .pl{font:500 9px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--faint);text-align:center;margin-top:2px}
 .pile .empty{width:100%;aspect-ratio:63/88;border:1px dashed var(--line);border-radius:4px}
-.hand{display:flex;gap:6px;padding:8px 10px;min-height:calc(var(--hw)*1.4 + 16px);overflow-x:auto;border-top:1px solid var(--line);background:rgba(0,0,0,.2)}
+/* La barra di scorrimento (sottile: 10 px in Chrome) ha già il suo spazio sotto le carte: quando compare o sparisce
+   l'altezza della mano non cambia, e il tavolo non salta. */
+.hand{display:flex;gap:6px;padding:8px 10px;min-height:calc(var(--hw)*1.4 + 28px);overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--faint) transparent;border-top:1px solid var(--line);background:rgba(0,0,0,.2)}
 .zone.opp .hand{border-top:0;border-bottom:1px solid var(--line);min-height:0;--hw:40px}
 .zone.opp .hand.shown{--hw:76px}
 .hand .hc{width:var(--hw);flex:none;cursor:grab;transition:transform .12s;touch-action:none}
@@ -253,6 +255,10 @@ details>summary{cursor:pointer}
 .bdg.ct{color:var(--prism)}
 .tag{position:absolute;top:-6px;left:50%;transform:translateX(-50%);font:600 8.5px var(--mono);letter-spacing:.08em;background:var(--ember);color:#241407;padding:0 4px;border-radius:3px;pointer-events:none}
 .ghost{position:fixed;z-index:80;pointer-events:none;width:var(--bw);opacity:.92;transform:rotate(-3deg);filter:drop-shadow(0 8px 14px rgba(0,0,0,.6))}
+/* Sopra il campo l'anteprima è dritta e opaca, nel punto esatto in cui la carta atterra. */
+.ghost.tp{transform:rotate(87deg)}
+.ghost.land{transform:none;opacity:1;box-shadow:0 0 0 2px var(--prism)}
+.ghost.land.tp{transform:rotate(90deg)}
 .drop-hot{outline:2px dashed var(--prism);outline-offset:-4px}
 .side{display:flex;flex-direction:column;gap:12px;min-width:0}
 .pvtext{font-size:12.5px;display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto}
@@ -1848,24 +1854,32 @@ function ownerP(zoneEl_){return zoneEl_.dataset.owner==='me'?G.me:zoneEl_.datase
 document.addEventListener('pointerdown',e=>{
   if(e.button!==0||VIEW!=='table')return;const el=e.target.closest('[data-u]');const z=e.target.closest('.zone');
   if(!el||!z||z.dataset.live!=='1')return;
-  drag={el,u:el.dataset.u,z,p:ownerP(z),from:el.dataset.z,sx:e.clientX,sy:e.clientY,moved:false};
+  // La carta resta presa nel punto in cui la si afferra: ox/oy è la distanza dal centro, riportata alla misura del campo.
+  const r=el.getBoundingClientRect(),k=cardW()/(el.offsetWidth||cardW());
+  drag={el,u:el.dataset.u,z,p:ownerP(z),from:el.dataset.z,sx:e.clientX,sy:e.clientY,moved:false,tp:el.classList.contains('tapped'),
+    ox:(e.clientX-r.left-r.width/2)*k,oy:(e.clientY-r.top-r.height/2)*k};
   clearTimeout(lpT);lpT=setTimeout(()=>{if(drag&&!drag.moved){const d=drag;drag=null;cardMenu(d.p,d.u,d.sx,d.sy)}},520);
 });
 document.addEventListener('pointermove',e=>{
   if(!drag)return;const dx=e.clientX-drag.sx,dy=e.clientY-drag.sy;
-  if(!drag.moved&&Math.hypot(dx,dy)>6){drag.moved=true;clearTimeout(lpT);const g=drag.el.querySelector('.face').cloneNode(true);g.className+=' ghost';g.style.width=cardW()+'px';document.body.appendChild(g);drag.g=g;drag.el.classList.add('drag-src');closeZoom()}
-  if(drag.moved){drag.g.style.left=(e.clientX-30)+'px';drag.g.style.top=(e.clientY-40)+'px';
-    document.querySelectorAll('.drop-hot').forEach(x=>x.classList.remove('drop-hot'));const t=dropTarget(e);if(t)t.classList.add('drop-hot')}
+  if(!drag.moved&&Math.hypot(dx,dy)>6){drag.moved=true;clearTimeout(lpT);const g=drag.el.querySelector('.face').cloneNode(true);g.className+=' ghost'+(drag.tp?' tp':'');g.style.width=cardW()+'px';document.body.appendChild(g);drag.g=g;drag.el.classList.add('drag-src');closeZoom()}
+  if(drag.moved){const t=dropTarget(e);document.querySelectorAll('.drop-hot').forEach(x=>x!==t&&x.classList.remove('drop-hot'));if(t)t.classList.add('drop-hot');
+    const c=landing(e,t);drag.g.style.left=(c.x-cardW()/2)+'px';drag.g.style.top=(c.y-cardW()*CARD_H/2)+'px';drag.g.classList.toggle('land',c.bf)}
 });
-function dropTarget(e){const els=document.elementsFromPoint(e.clientX,e.clientY);for(const x of els){const d=x.closest('[data-drop]');if(d&&d.closest('.zone')===drag.z)return d}return null}
+function dropTarget(e,dr=drag){const els=document.elementsFromPoint(e.clientX,e.clientY);for(const x of els){const d=x.closest('[data-drop]');if(d&&d.closest('.zone')===dr.z)return d}return null}
+// Centro della carta sullo schermo. Sopra il campo è il punto esatto in cui atterra: tutta dentro il campo, tappata o no.
+function landing(e,t,d=drag){let x=e.clientX-d.ox,y=e.clientY-d.oy;const bf=!!t&&t.dataset.drop==='bf';
+  if(bf){const r=t.getBoundingClientRect(),w=cardW(),h=w*CARD_H,hw=(d.tp?h:w)/2,hh=(d.tp?w:h)/2;
+    x=Math.max(r.left+hw,Math.min(r.right-hw,x));y=Math.max(r.top+hh,Math.min(r.bottom-hh,y))}
+  return{x,y,bf}}
 document.addEventListener('pointerup',e=>{
   clearTimeout(lpT);if(!drag)return;const d=drag;drag=null;
   document.querySelectorAll('.drop-hot').forEach(x=>x.classList.remove('drop-hot'));
   if(!d.moved){clickCard(d.p,d.u,d.from);return}
-  d.g&&d.g.remove();const t=(()=>{drag=d;const r=dropTarget(e);drag=null;return r})();
+  d.g&&d.g.remove();const t=dropTarget(e,d);
   if(!t){commit();return}
   const zone=t.dataset.drop;const p=d.p;
-  if(zone==='bf'){const r=t.getBoundingClientRect();let x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;x=Math.min(.97,Math.max(.03,x));y=Math.min(.95,Math.max(.05,y));if(t.dataset.mirror)y=1-y;
+  if(zone==='bf'){const r=t.getBoundingClientRect(),c=landing(e,t,d);let x=(c.x-r.left)/r.width,y=(c.y-r.top)/r.height;if(t.dataset.mirror)y=1-y;
     if(d.from==='bf'){const o=p.bf.find(o=>o.u===d.u);if(o){o.x=x;o.y=y;p.bf.splice(p.bf.indexOf(o),1);p.bf.push(o)}}else moveTo(p,d.u,'bf',{pos:{x,y}})}
   else if(zone!==d.from)moveTo(p,d.u,zone);
   commit();
