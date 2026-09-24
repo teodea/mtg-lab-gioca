@@ -32,6 +32,9 @@ h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.02em;text-wr
 .tabs{display:flex;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:3px}
 .tabs button{background:none;border:0;padding:6px 14px;border-radius:6px;color:var(--muted);font-weight:500}
 .tabs button[aria-selected="true"]{background:var(--surface2);color:var(--text);box-shadow:inset 0 -2px 0 var(--prism)}
+.tabs button.locked{opacity:.45}
+.tabs button.locked::after{content:" \1F512";font-size:11px}
+.seg button:disabled{opacity:.5;cursor:not-allowed}
 .status{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
 .chip{font:500 11px var(--mono);letter-spacing:.04em;padding:3px 8px;border-radius:99px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 .chip.on{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,transparent)}
@@ -957,11 +960,15 @@ function cleanLay(lay,us){const out={};if(!lay||typeof lay!=='object')return out
   return out}
 // Two-Headed Giant: team = 8 o 12 Buste (0 per il Kit individuale), seat = il posto scelto, 0 per il Compagno A e 1 per il B.
 // opened conta le Buste aperte tra le proprie; viewB è l'indice della Busta guardata, tra tutte quelle del Kit.
-function freshKit(seed){const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||''};S.viewB=firstOwn();saveS()}
+// at: quando è stato aperto il Kit, per capire chi dei due Compagni ha il Kit più recente; matePeer: l'ultimo Compagno trovato.
+function freshKit(seed){const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null};S.viewB=firstOwn();saveS()}
 // Le Buste di chi guarda: tutte nel Kit individuale, metà nel Kit di squadra.
 const ownCount=(s=S)=>s.team?s.team/2:6;
 const firstOwn=(s=S)=>s.team&&s.seat?s.team/2:0;
 const isOwnBooster=(i,s=S)=>i>=firstOwn(s)&&i<firstOwn(s)+ownCount(s);
+// La Sessione va in un solo verso: Apertura, poi Mazzo, poi Partite. Si è nell'Apertura finché restano Buste proprie chiuse;
+// passando al Mazzo si aprono tutte e da lì non se ne aprono altre (per un Pool diverso serve un Kit nuovo).
+const inOpening=(s=S)=>s.opened<ownCount(s);
 // Pool di squadra (ADR 0002): tc[i] conta i passaggi della carta di indice i nel Pool (0 se manca). Il proprietario è
 // quello iniziale (x.o) se tc[i] è pari, il Compagno se è dispari. Solo il proprietario attuale incrementa tc[i], quindi ogni
 // carta ha un solo scrittore: unendo due stati carta per carta con il massimo, le due pagine convergono.
@@ -981,8 +988,8 @@ function mergeTeam(tc,s=S){if(!s.team)return{changed:false,got:[]};const own=()=
   const after=own();s.deck=s.deck.filter(u=>after.has(u));return{changed:true,got:[...after].filter(u=>!before.has(u))}}
 // Contatori letti da un testo non fidato: solo indici del Pool e interi positivi.
 function cleanTc(tc,n){const out={};if(tc&&typeof tc==='object')for(const i in tc){const k=+i,t=Math.floor(+tc[i]);if(Number.isInteger(k)&&k>=0&&k<n&&t>0&&t<1e6)out[k]=t}return out}
-// Cambia posto: le Buste aperte ripartono da una, e dal Mazzo escono le carte del Compagno.
-function setSeat(seat){if(!S.team||S.seat===seat)return;S.seat=seat;S.opened=1;S.viewB=firstOwn();const mine=new Set(myPool().map(x=>x.u));
+// Cambia posto, solo durante l'Apertura: le Buste aperte ripartono da una, e dal Mazzo escono le carte del Compagno.
+function setSeat(seat){if(!S.team||S.seat===seat||!inOpening())return;S.seat=seat;S.opened=1;S.viewB=firstOwn();const mine=new Set(myPool().map(x=>x.u));
   S.deck=S.deck.filter(u=>mine.has(u));S.lay=null;S.saveId=null;saveS()}
 if(!S||!S.pool)freshKit(newSeed());
 migrateLay(S);
@@ -1003,7 +1010,8 @@ function saveDeck(name){syncLay();let s=!name&&findSave(S.saveId);
   Object.assign(s,{ts:Date.now(),seed:S.seed,team:S.team||0,boosters:S.boosters,promo:S.promo,pool:S.pool},deckPart(S));
   S.saveId=s.id;saveS();persistSaves();return s.id}
 function loadDeck(id){const s=findSave(id);if(!s)return;
-  S={seed:s.seed,team:s.team||0,boosters:s.boosters,promo:s.promo,pool:s.pool,...deckPart(s),nick:S.nick||'',saveId:s.id};S.opened=ownCount();S.viewB=firstOwn();
+  // Un Mazzo di un altro Kit apre una Sessione nuova, come un Kit nuovo: cambia anche at.
+  S={seed:s.seed,team:s.team||0,boosters:s.boosters,promo:s.promo,pool:s.pool,...deckPart(s),nick:S.nick||'',saveId:s.id,at:s.seed===S.seed?S.at:Date.now(),matePeer:S.matePeer||null};S.opened=ownCount();S.viewB=firstOwn();
   // Salvataggi con le Pile incomplete (di prima delle colonne, o migrati): prendono la disposizione calcolata,
   // così non risultano subito modificati.
   syncLay();const lay=deckPart(S).lay;if(JSON.stringify(lay)!==JSON.stringify(s.lay)){s.lay=lay;persistSaves()}saveS()}
@@ -1031,9 +1039,26 @@ function importDeck(code){const m=/^MTGLAB1:([A-Za-z0-9+/=]+)$/.exec(String(code
   SAVES.unshift(s);persistSaves();return s.id}
 
 /* 41-views.js */
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>go(b.dataset.view));
-function go(v){VIEW=v;document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.view===v));['open','deck','table'].forEach(x=>$('#v-'+x).hidden=x!==v);closeZoom();renderAll();scrollTo(0,0)}
-function renderAll(){if(VIEW==='open')renderOpen();else if(VIEW==='deck')renderDeck();else renderTable()}
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>goStep(b.dataset.view));
+function go(v){VIEW=v;markTabs();['open','deck','table'].forEach(x=>$('#v-'+x).hidden=x!==v);closeZoom();renderAll();scrollTo(0,0)}
+// Le schede seguono la Sessione: durante una Partita l'Apertura e il Mazzo sono bloccati, e al Mazzo si passa dall'Apertura
+// solo aprendo le Buste rimaste. Il Tavolo si guarda sempre (c'è il Registro con la chat).
+function markTabs(){const lock=typeof gameOpen==='function'&&gameOpen();document.querySelectorAll('.tabs button').forEach(b=>{const v=b.dataset.view,l=lock&&v!=='table';
+  b.setAttribute('aria-selected',v===VIEW);b.classList.toggle('locked',l);b.title=l?'Bloccato durante la Partita':''})}
+function goStep(v){if(v===VIEW)return;if(v!=='table'&&gameOpen()){lockedModal(v);return}if(v==='deck'&&inOpening()){toDeckModal();return}go(v)}
+// Dall'Apertura al Mazzo: le Buste ancora chiuse si aprono tutte, e poi non se ne aprono altre.
+function toDeckModal(){const n=ownCount()-S.opened;
+  openModal('Passi alla costruzione del Mazzo',m=>{
+    m.innerHTML=`<p style="margin-top:0">${n===1?'La Busta ancora chiusa si apre':`Le ${n} Buste ancora chiuse si aprono tutte`} adesso, e da qui non si torna ad aprire Buste: potrai solo rivederle. Per un Pool diverso serve un Kit nuovo, che annulla il Mazzo${S.team?' tuo e del tuo Compagno':''}.</p>
+      <div class="row" style="justify-content:flex-end;gap:8px"><button class="btn" id="td-no">Resta all'Apertura</button><button class="btn pri" id="td-go">Apri tutte e costruisci</button></div>`;
+    $('#td-no').onclick=closeModal;$('#td-go').onclick=()=>{S.opened=ownCount();FLIP={b:-1,n:0};saveS();closeModal();go('deck')}})}
+// Apertura o Mazzo durante una Partita: prima la si finisce o la si abbandona.
+function lockedModal(v){const solo=G.mode==='solo',bo3=G.match.bo===3&&!G.match.hg;
+  openModal('Partita in corso',m=>{
+    m.innerHTML=`<p style="margin-top:0">Durante la Partita ${v==='deck'?'il Mazzo non si cambia':"non si torna all'Apertura"}. Finiscila e segna il risultato con «Fine Partita», oppure ${solo?'chiudila':'abbandonala: conta come persa'}.${bo3?" Nel Bo3, tra una Partita e l'altra, puoi tornare al Mazzo e cambiarlo con le carte del Sideboard.":''}</p>
+      <div class="row" style="justify-content:flex-end;gap:8px"><button class="btn pri" id="lk-no">Torna al Tavolo</button><button class="btn warm" id="lk-go">${solo?'Chiudi la Partita':'Abbandona la Partita'}</button></div>`;
+    $('#lk-no').onclick=closeModal;$('#lk-go').onclick=()=>{concede();closeModal();goStep(v)}})}
+function renderAll(){markTabs();if(VIEW==='open')renderOpen();else if(VIEW==='deck')renderDeck();else renderTable()}
 
 const SLOT_LBL={c:'Comune',sg:'Special Guest',u:'Non comune',cu:'Com./Non com.',e:'Eco',r:'Rara/Mitica',f:'Foil',l:'Terra',k:'Pedina',p:'Promo'};
 const slotLabel=x=>SLOT_LBL[x.s]+(x.v&&BY[x.v].tr?' · '+TR_NAME[BY[x.v].tr]:'')+(x.f&&x.s!=='f'?' · foil':'');
@@ -1055,7 +1080,7 @@ function renderOpen(){
   const range=o=>`Buste ${o*team/2+1}-${(o+1)*team/2}`+(S.pool.some(x=>x.p&&x.o===o)?' e promo':'');
   el.innerHTML=`<div class="intro"><div><div class="eyebrow">${KIT_KIND[team][1]}</div><h2>${team?'Apri le tue Buste del Kit di squadra':'Apri il tuo Pool di Reality Fracture'}</h2>${team?`<p>Un solo codice per tutta la squadra: dallo al tuo Compagno e scegliete posti diversi. Ognuno apre le sue Buste (${range(0)} al ${seatName(0)}, ${range(1)} al ${seatName(1)}) e poi può rivedere quelle dell'altro. Nel Mazzo usi le carte di cui sei proprietario, e nella scheda Mazzo puoi darne al Compagno. Le Buste seguono la stessa collation del Kit individuale.</p>`:`<p>Ogni kit nasce da un codice: condividilo e il tuo amico otterrà lo stesso identico Pool. Le buste seguono la collation delle Play Booster vere, con le percentuali ufficiali, e le carte escono nell'ordine in cui stanno nella busta: 6 comuni di tutti e 5 i colori, 2 non comuni, 3 carte «eco» (una coppia e la carta vicina sul foglio), la Special Guest in 1 busta su 55, rara o mitica con i trattamenti Shattered Mirror, Sculptor's Stronghold, Braintwister e Portal view, foil, terra e pedina.</p>`}</div>
   <div class="kitctl"><div class="seg" role="group" aria-label="Tipo di Kit">${[0,8,12].map(k=>`<button data-kind="${k}" aria-pressed="${team===k}">${KIT_KIND[k][0]}</button>`).join('')}</div>
-  ${team?`<div class="seg" role="group" aria-label="Il tuo posto">${[0,1].map(o=>`<button data-seat="${o}" aria-pressed="${S.seat===o}">${seatName(o)} · ${range(o)}</button>`).join('')}</div>`:''}
+  ${team?`<div class="seg" role="group" aria-label="Il tuo posto">${[0,1].map(o=>`<button data-seat="${o}" aria-pressed="${S.seat===o}"${inOpening()?'':` disabled title="Il posto si sceglie durante l'Apertura: per cambiarlo ricarica il codice del Kit"`}>${seatName(o)} · ${range(o)}</button>`).join('')}</div>`:''}
   <div class="row"><input type="text" id="seed" value="${esc(S.seed)}" aria-label="Codice kit" size="13" class="mono"><button class="btn" id="regen">Carica codice</button><button class="btn pri" id="newkit">Nuovo kit</button></div></div></div>
   <div class="packs" id="packs"></div>
   <div class="row" style="justify-content:space-between;margin-bottom:12px"><h3 style="font-size:16px">${b?`Busta ${vb+1}${mate?` · del ${seatName(1-S.seat)}`:''}`:'Busta ancora chiusa'}</h3>
@@ -1093,16 +1118,18 @@ function renderOpen(){
   $('#next')&&($('#next').onclick=()=>{S.opened++;S.viewB=own0+S.opened-1;FLIP={b:S.viewB,n:0};S._anim=-1;saveS();renderOpen()});
   $('#all')&&($('#all').onclick=()=>{S.opened=nOwn;S.viewB=own0+nOwn-1;FLIP={b:-1,n:0};S._anim=S.viewB;saveS();renderOpen()});
   $('#flipall')&&($('#flipall').onclick=()=>flipNext(true));
-  $('#todeck').onclick=()=>{S.opened=nOwn;saveS();go('deck')};
-  const open_=(code,msg)=>{freshKit(code);FLIP={b:S.viewB,n:0};S._anim=-1;const tm=timerNewKit();renderOpen();toast(msg+S.seed+(tm?' · timer avviato':''))};
-  // Un kit nuovo sostituisce il Pool e svuota il Mazzo: se il Mazzo non è salvato si chiede prima (niente confirm(), che nell'Artifact è bloccato).
-  const load=(code,msg)=>{const n=kitLoss();if(!n){open_(code,msg);return}
-    openModal('Il tuo Mazzo non è salvato',m=>{
-      m.innerHTML=`<p style="margin-top:0">Hai un Mazzo di ${n} carte non salvato: aprendo un altro kit si perde. La Partita in corso sul Tavolo non cambia.</p>
-        <div class="row" style="justify-content:flex-end;gap:8px"><button class="btn" id="kl-no">Annulla</button><button class="btn warm" id="kl-go">Apri senza salvare</button><button class="btn pri" id="kl-save">Salva e apri il kit</button></div>`;
+  $('#todeck').onclick=()=>goStep('deck');
+  const open_=(code,msg)=>{freshKit(code);resetGame();commit();FLIP={b:S.viewB,n:0};S._anim=-1;const tm=timerNewKit();renderOpen();toast(msg+S.seed+(tm?' · timer avviato':''))};
+  // Un Kit nuovo apre una Sessione nuova: Pool, Mazzo e Match ripartono da zero, e nel Two-Headed Giant anche il Compagno.
+  // Prima si avvisa, e se il Mazzo non è salvato si propone di salvarlo (niente confirm(), che nell'Artifact è bloccato).
+  const load=(code,msg)=>{const n=kitLoss(),match=!!G.me||!!G.match.res;if(!n&&!match&&S.opened<=1&&!(S.team&&MATE)){open_(code,msg);return}
+    const toTeam=!!kitTeam(code);
+    openModal('Kit nuovo: si riparte da zero',m=>{
+      m.innerHTML=`<p style="margin-top:0">Con un altro Kit si perdono le Buste aperte${n?` e il Mazzo di ${n} carte, che non è salvato`:S.deck.length?' e il Mazzo attuale (lo ritrovi in «Mazzi salvati»)':''}${match?', e il Match sul Tavolo si chiude':''}.${S.team?` ${toTeam?'Anche il tuo Compagno riparte: la sua pagina passa al Kit nuovo e il suo Mazzo si annulla.':'La squadra si scioglie: il tuo Compagno resta sul Kit di adesso, senza di te.'}`:''}</p>
+        <div class="row" style="justify-content:flex-end;gap:8px"><button class="btn" id="kl-no">Annulla</button><button class="btn warm" id="kl-go">${n?'Apri senza salvare':'Apri il Kit nuovo'}</button>${n?'<button class="btn pri" id="kl-save">Salva e apri il Kit</button>':''}</div>`;
       $('#kl-no').onclick=closeModal;
       $('#kl-go').onclick=()=>{closeModal();open_(code,msg)};
-      $('#kl-save').onclick=()=>{saveDeck();closeModal();open_(code,msg)}})};
+      $('#kl-save')&&($('#kl-save').onclick=()=>{saveDeck();closeModal();open_(code,msg)})})};
   publish();
   $('#newkit').onclick=()=>load(newSeed(team),'Nuovo kit: ');
   el.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{if(+b.dataset.kind!==team)load(newSeed(+b.dataset.kind),'Nuovo kit: ')});
@@ -1263,7 +1290,7 @@ function savesModal(){let armed=null;
         <div class="row"></div>`;
       const acts=r.querySelector('.row');const B=(l,f,cls='')=>{const b=document.createElement('button');b.className='btn sm '+cls;b.textContent=l;b.onclick=f;acts.appendChild(b)};
       const loadKey='load'+s.id,delKey='del'+s.id;
-      if(s.id!==S.saveId||deckDirty())B(armed===loadKey?'Sostituisci il Mazzo attuale?':'Carica',()=>{if(dirty&&armed!==loadKey){armed=loadKey;draw_();return}loadDeck(s.id);closeModal();renderAll();toast('Caricato: '+s.name)},armed===loadKey?'warm':'');
+      if(s.id!==S.saveId||deckDirty())B(armed===loadKey?'Sostituisci il Mazzo attuale?':'Carica',()=>{if(dirty&&armed!==loadKey){armed=loadKey;draw_();return}const other=s.seed!==S.seed;loadDeck(s.id);if(other){resetGame();commit()}closeModal();renderAll();toast('Caricato: '+s.name+(other?' · il Match riparte da zero':''))},armed===loadKey?'warm':'');
       B('Esporta',()=>{const code=exportDeck(s.id);try{navigator.clipboard.writeText(code).then(()=>toast('Codice copiato'),()=>{})}catch(e){}$('#svcode').value=code;m.querySelector('details').open=true;$('#svcode').select()});
       B(armed===delKey?'Elimina davvero':'Elimina',()=>{if(armed!==delKey){armed=delKey;draw_();return}deleteDeck(s.id);armed=null;draw_()},armed===delKey?'warm':'');
       L.appendChild(r)});
@@ -1357,6 +1384,14 @@ G.tally=G.tally||{w:0,l:0}; // Match vinti e persi da quando hai azzerato il bil
 // Salvataggi di prima di gn: il numero si ricava dall'ultima riga «Partita N del Match» del registro.
 if(G.gn==null){const m=G.log.map(l=>/^Partita (\d+) del Match/.exec(l.tx)).filter(Boolean).pop();G.gn=m?+m[1]:G.match.res.length+(G.me?1:0)}
 const gameOpen=()=>!!G.me&&!matchScore(G.match.res,G.match.bo).over&&G.gn>G.match.res.length;
+// Un Kit nuovo apre una Sessione nuova: la Partita e il Match del Kit di prima si chiudono. seed: il Kit con cui si gioca.
+function resetGame(){const had=!!G.me||!!G.match.res;G.me=null;G.bot=null;G.match={res:'',bo:G.match.bo,hg:G.match.hg};G.gn=0;G.seed=S.seed;
+  if(had)log(null,'Partita e Match chiusi: si riparte con il Kit attuale.')}
+// Una Partita rimasta da un altro Kit (salvataggi di prima della Sessione, senza seed) non si riprende.
+if(G.me&&G.seed!==S.seed)resetGame();
+// Abbandonare: nel goldfish la Partita si chiude e basta, altrimenti conta come persa (e online l'avversario lo legge nel Registro).
+function concede(){if(!gameOpen())return;if(G.mode==='solo'){log(G.me,'Chiude la Partita');G.me=null;commit();return}
+  log(G.me,'Abbandona la Partita');recordResult('L')}
 let UIDN=Date.now()%1e6;const uid=()=>'k'+(UIDN++).toString(36);
 const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const fmtName=(m=G.match)=>m.hg?'2HG':'Bo'+m.bo;
@@ -1398,7 +1433,7 @@ function startGame(first,fmt){
   const list=deckList();if(!list.length){toast('Il Mazzo è vuoto: costruiscilo prima');go('deck');return}
   const match=G.match;if(mScore().over){match.res='';match.bot=null}
   if(!match.res&&fmt){match.hg=fmt==='hg'?1:0;match.bo=match.hg?1:fmt}
-  const coin=!first;const nick=S.nick||'Tu';G={mode:G.mode||'bot',log:[],first:first||(Math.random()<.5?'me':'bot'),match,tally:G.tally,me:mkPlayer(nick,list),bot:null};
+  const coin=!first;const nick=S.nick||'Tu';G={mode:G.mode||'bot',log:[],first:first||(Math.random()<.5?'me':'bot'),match,tally:G.tally,me:mkPlayer(nick,list),bot:null,seed:S.seed};
   const gn=G.gn=match.res.length+1;
   log(null,`Partita ${gn} del Match ${match.hg?'Two-Headed Giant (una Partita, 30 vite, primo mulligan gratis)':'al meglio di '+match.bo}${match.res?' ('+scoreText()+')':''}. Mazzo di ${list.length} carte${list.length<40?' (meno di 40!)':''}.`);
   const who1=G.mode==='bot'?(G.first==='me'?'Inizi tu':'Inizia il bot'):(G.first==='me'?'Vai per primo':'Vai per secondo');
@@ -1509,25 +1544,34 @@ function packPerm(o){const a=[o.fd?'?':o.c==='x'?'x':vis(o),Math.round(o.x*1000)
 let tabHidden=false;
 // Larghezza del mio campo misurata adesso: lastBfW si aggiorna in requestAnimationFrame, che non gira nelle schede in background.
 const myBfW=()=>(typeof document!=='undefined'&&document.querySelector('#mez .bf')?.clientWidth)||lastBfW;
-// Pool di squadra nella presence, accanto a g: t = {k: codice del Kit, s: posto, x: passaggi delle carte, d: il mio Mazzo}.
+// Pool di squadra nella presence, accanto a g: t = {k: codice del Kit, s: posto, x: passaggi delle carte, d: il mio Mazzo,
+// a: quando ho aperto il Kit, in base 36}.
 // x e d usano gli indici del Pool in base 36, non gli uid: x sono coppie «indice.passaggi» separate da spazi, con «.passaggi»
 // omesso quando vale 1; d gli indici delle carte nel Mazzo. Con un Pool da 12 Buste resta di poche centinaia di byte.
 const b36=n=>n.toString(36);
 function teamPub(s=S){if(!s?.team)return null;const at=Object.fromEntries(s.pool.map((x,i)=>[x.u,i]));
-  return{k:s.seed,s:s.seat,x:Object.entries(s.tc||{}).filter(([,t])=>t>0).map(([i,t])=>b36(+i)+(t>1?'.'+b36(t):'')).join(' '),d:s.deck.filter(u=>u in at).map(u=>b36(at[u])).join(' ')}}
+  return{k:s.seed,s:s.seat,x:Object.entries(s.tc||{}).filter(([,t])=>t>0).map(([i,t])=>b36(+i)+(t>1?'.'+b36(t):'')).join(' '),d:s.deck.filter(u=>u in at).map(u=>b36(at[u])).join(' '),a:b36(s.at||0)}}
 // La presence di un altro non è fidata: si tengono solo indici del Pool (n carte) e passaggi interi positivi.
 function teamRead(t,n){if(!t||typeof t!=='object'||typeof t.k!=='string')return null;const tc={},d=[];
   String(t.x||'').split(' ').forEach(w=>{const m=/^([0-9a-z]{1,2})(?:\.([0-9a-z]{1,4}))?$/.exec(w);if(!m)return;const i=parseInt(m[1],36),c=m[2]?parseInt(m[2],36):1;if(i<n&&c>0)tc[i]=Math.max(tc[i]||0,c)});
   String(t.d||'').split(' ').forEach(w=>{if(/^[0-9a-z]{1,2}$/.test(w)&&parseInt(w,36)<n)d.push(parseInt(w,36))});
-  return{k:t.k.slice(0,24),s:t.s===1?1:0,tc,d}}
+  const a=/^[0-9a-z]{1,10}$/.test(t.a)?parseInt(t.a,36):0;
+  return{k:t.k.slice(0,24),s:t.s===1?1:0,tc,d,a}}
 // Il Compagno è il peer con lo stesso codice di squadra e il posto opposto, non per forza l'avversario del Tavolo.
 // Tra più schede così vale quella aggiornata più di recente.
 function findMate(peers,s=S){if(!s?.team)return null;
   const c=peers.map(p=>({p,t:teamRead(p.presence?.t,s.pool.length)})).filter(o=>o.t&&o.t.k===s.seed&&o.t.s!==s.seat).sort((a,b)=>b.p.updatedAt-a.p.updatedAt)[0];
   return c?{...c.t,nm:String(c.p.presence.g?.nm||'').slice(0,24),peer:c.p.peer}:null}
+// Il Compagno ha aperto un altro Kit di squadra, più recente del mio: il codice da seguire, altrimenti null.
+// Vale solo per l'ultimo Compagno trovato (matePeer), non per chiunque entri nella Stanza con un Kit diverso.
+function mateMoved(peers,s=S){if(!s?.team||!s.matePeer)return null;const p=peers.find(p=>p.peer===s.matePeer);const t=p&&teamRead(p.presence?.t,0);
+  return t&&t.k!==s.seed&&kitTeam(t.k)&&t.a>(s.at||0)?t.k:null}
 let MATE=null;
 // Ritrova il Compagno tra i peer e ne unisce i passaggi. true se è cambiato qualcosa da mostrare.
-function syncMate(){const was=JSON.stringify([MATE,S.tc]);MATE=findMate(allPeers);
+// Se il Compagno è passato a un Kit nuovo lo segue, ma non a Partita aperta: prima la si finisce.
+function syncMate(){const nk=!gameOpen()&&mateMoved(allPeers);
+  if(nk){freshKit(nk);resetGame();FLIP={b:S.viewB,n:0};S._anim=-1;const tm=timerNewKit();commit();renderAll();toast(`Il tuo Compagno ha aperto un Kit nuovo (${nk}): riparti da lì, il tuo Mazzo è annullato`+(tm?' · timer avviato':''))}
+  const was=JSON.stringify([MATE,S.tc]);MATE=findMate(allPeers);if(MATE&&S.matePeer!==MATE.peer){S.matePeer=MATE.peer;saveS()}
   if(MATE){const r=mergeTeam(MATE.tc);if(r.changed){syncLay();saveS();publish()}
     if(r.got.length){const byU=byUid(S.pool);toast(`${MATE.nm||'Il Compagno'} ti ha dato ${r.got.length===1?BY[byU[r.got[0]].c].n:r.got.length+' carte'}: ${r.got.length===1?'è':'sono'} nel tuo Sideboard`)}}
   return JSON.stringify([MATE,S.tc])!==was}
@@ -1607,7 +1651,7 @@ function renderTable(){
     // Invio esplicito: l'invio implicito del form non è arrivato in tutti i browser della prova.
     $('#chatin').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();send()}};
   }
-  sizeCards();renderModebar();
+  sizeCards();renderModebar();markTabs();
   const mez=$('#mez');mez.innerHTML='';
   if(!G.me){mez.innerHTML=`<div class="nog">Nessuna Partita in corso.<br><br><button class="btn pri" id="sg">Nuova Partita con il tuo Mazzo (${deckList().length} carte)</button></div>`;$('#sg').onclick=nextGameModal}
   else mez.appendChild(zoneEl(G.me,{owner:'me',live:true}));
@@ -1663,6 +1707,7 @@ function nextGameModal(){const s=mScore();const gn=s.over?1:G.match.res.length+1
         ${gn>1?`<p class="muted" style="margin:0;font-size:12px">${last==='L'?'Hai perso la Partita precedente: scegli tu chi inizia.':last==='W'?"Hai vinto la Partita precedente: sceglie l'avversario chi inizia.":'Pareggio: chi inizia si decide come per la prima Partita.'}</p>`:G.mode==='online'?'<p class="muted" style="margin:0;font-size:12px">Scegliete lo stesso formato, poi decidete chi inizia con una moneta (Dado → Lancia una moneta) e scegliete entrambi la stessa cosa.</p>':''}
         <h4 class="sbh">Mazzo · clic → Sideboard</h4><div class="zwrap sb" id="sbdeck"></div><div class="basics sbb" id="sbbas"></div>
         <h4 class="sbh">Sideboard (${nSide}) · clic → Mazzo</h4><div class="zwrap sb" id="sbside"></div>
+        ${restart?'':`<p class="muted" style="margin:0;font-size:12px">Durante la Partita l'Apertura e il Mazzo restano bloccati: per tornarci finisci la Partita (Fine Partita) o ${G.mode==='solo'?'chiudila':'abbandonala, che conta come persa'}.${gn===1&&fmt===3?" Nel Bo3 tra una Partita e l'altra si torna al Mazzo.":''}</p>`}
         <div class="row mfoot"><button class="btn pri" id="sbgo">${restart?`Ricomincia la Partita ${gn}`:gn===1?`Inizia il Match (${fmt==='hg'?'2HG':'Bo'+fmt})`:`Inizia la Partita ${gn}`}</button></div>`;
       m.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{recordResult(b.dataset.r);closeModal();nextGameModal()});
       m.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{first=b.dataset.f;draw_()});
@@ -1852,6 +1897,7 @@ document.addEventListener('keydown',e=>{if(VIEW!=='table'||!G.me||e.target.close
 window.addEventListener('resize',()=>{if(VIEW==='table'&&!drag){renderTable();publish()}});
 
 /* 99-boot.js */
-loadPacks();renderAll();initRoom();initTimer();
+// Con una Partita aperta si riparte dal Tavolo: l'Apertura e il Mazzo sono bloccati.
+loadPacks();if(gameOpen())go('table');else renderAll();initRoom();initTimer();
 
 </script>
