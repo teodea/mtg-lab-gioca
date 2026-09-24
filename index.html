@@ -342,20 +342,23 @@ safe-buffer/index.js:
 */
 
 // La capability `room` di claude.ai rifatta sopra broker MQTT pubblici, per la versione web che si apre senza login.
-// Implementa solo ciò che usa l'app (presence, onPeers, onConnection), come dev/mock-room.js, più leave() e link.
+// Implementa solo ciò che usa l'app (presence, onPeers, onConnection), come dev/mock-room.js, più leave(), resume() e link.
 //
 // Ogni scheda tiene la sua presence in un messaggio retained su mtglab/v1/<stanza>/p/<peer>: chi arriva dopo la trova
 // subito. Il Last Will (payload vuoto e retained) la cancella se la scheda cade senza salutare; se neanche il Last Will
 // arriva, la toglie il battito: ogni minuto si ripubblica con hb aggiornato e chi tace da 3 minuti non conta più.
-// Ci si collega a più broker insieme e si uniscono i peer, così basta che uno risponda.
+// Un retained rimasto sul broker con un battito di più di 10 minuti fa è un fantasma e non si prende: la soglia è larga
+// perché hb viene dall'orologio di chi scrive, che può essere sfasato di qualche minuto.
+// Ci si collega a più broker insieme e si uniscono i peer, così basta che uno risponda: un peer sparisce solo quando
+// è uscito da tutti i broker su cui c'era, e tra due copie della sua presence vale quella con at più recente.
 // Come nella room vera, updatedAt di un peer cambia solo quando cambia la sua presence, non con il battito.
 const MQTT_BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
-const HEARTBEAT_MS = 60000, SILENT_MS = 3 * 60000;
+const HEARTBEAT_MS = 60000, SILENT_MS = 3 * 60000, GHOST_MS = 10 * 60000;
 
 function mqttRoom({ urls, connect, room, me, browser, now = Date.now, every = setInterval }) {
   const base = `mtglab/v1/${room}/p/`, mine = base + me;
-  let presence = {}, sentAt = 0, conn = false;
-  const peers = new Map(); // peer -> {b, p, js, at, seen}
+  let presence = {}, sentAt = 0, conn = false, away = false;
+  const peers = new Map(); // peer -> {b, p, js, at, sat: at di chi scrive, seen, on: broker su cui c'è}
   const peerH = new Set(), connH = new Set();
   const snapshot = () => [
     { peer: me, by: null, isMe: true, sameTab: true, kind: 'viewer', guest: false, presence, updatedAt: sentAt || now() },
@@ -364,32 +367,40 @@ function mqttRoom({ urls, connect, room, me, browser, now = Date.now, every = se
   const emitPeers = () => { const ps = snapshot(); peerH.forEach(h => h({ peers: ps, joined: [], left: [], updated: [] })); };
   const setConn = () => { const c = clients.some(x => x.connected); if (c !== conn) { conn = c; connH.forEach(h => h(c)); } };
   const payload = () => JSON.stringify({ b: browser, at: sentAt, hb: now(), p: presence });
-  const send = () => { if (!sentAt) return; const m = payload(); clients.forEach(c => c.connected && c.publish(mine, m, { retain: true, qos: 0 })); };
+  const put = (c, m) => c.connected && c.publish(mine, m, { retain: true, qos: 0 });
+  // Dopo leave (pagina chiusa o messa nella cache del browser) non si pubblica più finché resume non la riprende.
+  const send = () => { if (!sentAt || away) return; const m = payload(); clients.forEach(c => put(c, m)); };
   const decode = m => (typeof m === 'string' ? m : new TextDecoder().decode(m));
 
-  // Quello che arriva dagli altri non è fidato: si tiene solo un oggetto con p oggetto e un battito recente.
-  function hear(topic, m) {
+  const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
+  // Quello che arriva dagli altri non è fidato: si tiene solo un oggetto con p oggetto e un battito non da fantasma.
+  const isPresenceMsg = (d, t) => isObj(d) && isObj(d.p) && t - (+d.hb || 0) < GHOST_MS;
+  // i: il broker da cui arriva il messaggio. Un payload vuoto (uscita o Last Will) vale solo per quel broker.
+  function hear(topic, m, i) {
     const peer = topic.slice(base.length);
     if (!topic.startsWith(base) || peer === me || !peer) return;
     let d = null;
     try { d = decode(m) ? JSON.parse(decode(m)) : null; } catch (e) { return; }
     const t = now(), old = peers.get(peer);
-    if (!d || typeof d !== 'object' || Array.isArray(d) || !d.p || typeof d.p !== 'object' || Array.isArray(d.p) || !(t - (+d.hb || 0) < SILENT_MS)) {
-      if (d === null && old) { peers.delete(peer); emitPeers(); }
+    if (d === null) {
+      if (old && old.on.delete(i) && !old.on.size) { peers.delete(peer); emitPeers(); }
       return;
     }
+    if (!isPresenceMsg(d, t)) return;
+    const sat = +d.at || 0;
+    if (old) { old.on.add(i); old.seen = t; if (sat < old.sat) return; }
     const js = JSON.stringify(d.p), same = old && old.js === js;
-    peers.set(peer, { b: String(d.b || ''), p: same ? old.p : d.p, js, at: same ? old.at : old ? t : Math.min(t, +d.at || t), seen: t });
+    peers.set(peer, { b: String(d.b || ''), p: same ? old.p : d.p, js, at: same ? old.at : old ? t : Math.min(t, sat || t), sat, seen: t, on: old ? old.on : new Set([i]) });
     if (!same) emitPeers();
   }
 
   const clients = urls.map((url, i) => {
     const c = connect(url, {
-      clientId: `mtglab_${me}_${i}`, keepalive: 20, clean: true, reconnectPeriod: 4000, connectTimeout: 8000,
+      clientId: `mtglab_${me}_${i}`, keepalive: 10, clean: true, reconnectPeriod: 4000, connectTimeout: 8000,
       will: { topic: mine, payload: '', retain: true, qos: 0 },
     });
-    c.on('connect', () => { c.subscribe(base + '+', { qos: 0 }); if (sentAt) c.publish(mine, payload(), { retain: true, qos: 0 }); setConn(); });
-    c.on('message', (t, m) => hear(t, m));
+    c.on('connect', () => { c.subscribe(base + '+', { qos: 0 }); if (sentAt && !away) put(c, payload()); setConn(); });
+    c.on('message', (t, m) => hear(t, m, i));
     ['close', 'offline', 'error'].forEach(e => c.on(e, setConn));
     return c;
   });
@@ -412,8 +423,12 @@ function mqttRoom({ urls, connect, room, me, browser, now = Date.now, every = se
     onConnection: h => { connH.add(h); queueMicrotask(() => h(conn)); return () => connH.delete(h); },
     peers: snapshot,
     connected: () => conn,
-    // Uscita pulita: si cancella la presence retained, poi si chiude.
-    leave: () => { clients.forEach(c => { if (c.connected) c.publish(mine, '', { retain: true, qos: 0 }); c.end(); }); },
+    // Uscita pulita: si cancella la presence retained e si chiude (con end il Last Will non parte). Se la pagina
+    // torna dalla cache del browser (pageshow), resume si ricollega e al connect ripubblica la presence.
+    // Quando la pagina si chiude davvero il browser taglia il socket prima che partano i messaggi: allora la cancella
+    // il Last Will, che il broker pubblica entro 1,5 keepalive (15 secondi).
+    leave: () => { away = true; clients.forEach(c => { put(c, ''); c.end(); }); },
+    resume: () => { away = false; clients.forEach(c => c.reconnect()); },
   };
 }
 
@@ -423,16 +438,27 @@ if (typeof window !== 'undefined') (() => {
   const rnd = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), x => 'abcdefghijkmnpqrstuvwxyz23456789'[x % 32]).join('');
   const get = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const put = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-  const code = (/[#&]stanza=([a-z0-9]{4,16})/.exec(location.hash) || [])[1] || get('mtglab-stanza') || rnd(8);
+  const inLink = () => ((/[#&]stanza=([a-z0-9]{4,16})/i.exec(location.hash) || [])[1] || '').toLowerCase();
+  const code = inLink() || get('mtglab-stanza') || rnd(8);
   put('mtglab-stanza', code);
   history.replaceState(null, '', location.pathname + location.search + '#stanza=' + code);
   const browser = get('mtglab-browser') || rnd(10);
   put('mtglab-browser', browser);
+  // Chi ricarica la pagina tiene lo stesso peer (e lo stesso clientId): il broker chiude la connessione vecchia e la
+  // nuova presence prende il posto di quella vecchia, invece di lasciare per 15 secondi un secondo giocatore fantasma.
+  // Solo sul ricaricamento: una scheda duplicata copia il sessionStorage e con lo stesso clientId si caccerebbero a vicenda.
+  let me = null;
+  try { if (performance.getEntriesByType('navigation')[0]?.type === 'reload') me = sessionStorage.getItem('mtglab-peer'); } catch (e) {}
+  me = me || rnd(10);
+  try { sessionStorage.setItem('mtglab-peer', me); } catch (e) {}
   let r = null;
   if (window.mqtt) {
-    r = mqttRoom({ urls: MQTT_BROKERS, connect: (u, o) => window.mqtt.connect(u, o), room: code, me: rnd(10), browser });
+    r = mqttRoom({ urls: MQTT_BROKERS, connect: (u, o) => window.mqtt.connect(u, o), room: code, me, browser });
     r.link = location.href;
     addEventListener('pagehide', r.leave);
+    addEventListener('pageshow', e => e.persisted && r.resume());
+    // Il link di un'altra stanza aperto nella stessa scheda cambia solo l'hash: si ricarica per entrarci.
+    addEventListener('hashchange', () => { const c = inLink(); if (c && c !== code) { put('mtglab-stanza', c); location.reload(); } });
   }
   window.claude = { use: async name => (name === 'room' ? r : null) };
 })();
@@ -1574,7 +1600,7 @@ function renderOppOnly(){
   const oz=$('#oppz');if(!oz)return;oz.innerHTML='';
   if(G.mode==='bot'){if(G.bot)oz.appendChild(zoneEl(G.bot,{owner:'bot',live:true,mirror:true}));else oz.innerHTML='<div class="nog">Avvia una nuova Partita: il bot aprirà il suo kit e costruirà un Mazzo.</div>'}
   else if(G.mode==='online'){
-    if(!ROOM)oz.innerHTML='<div class="nog">Il gioco online funziona quando la pagina è aperta su claude.ai e condivisa con il tuo amico: ognuno apre il proprio kit, costruisce il Mazzo e sceglie «Contro un amico».</div>';
+    if(!ROOM)oz.innerHTML='<div class="nog">Il gioco online non è disponibile in questa pagina: aprila su claude.ai (Artifact condiviso con il tuo amico) o dal sito web. Poi ognuno apre il proprio kit, costruisce il Mazzo e sceglie «Contro un amico».</div>';
     else if(!OPP)oz.innerHTML=`<div class="nog">In attesa dell'avversario… Quando il tuo amico apre ${ROOM.link?'il link della stanza (<b>Copia il link per l\'amico</b>)':'questa pagina'} e sceglie «Contro un amico», il suo campo compare qui in tempo reale.</div>`;
     else if(OPP.idle)oz.innerHTML=`<div class="nog"><b>${esc(OPP.nm)}</b> è al tavolo ma non ha ancora iniziato una Partita.</div>`;
     else{const rp=remoteToPlayer(OPP);oz.appendChild(zoneEl(rp,{owner:'opp',live:false,mirror:true}));spreadRemote(oz.querySelector('.bf'),rp.bf,rp.fw)}
