@@ -92,6 +92,12 @@ input[type=text],input[type=number],select{background:var(--surface);border:1px 
 .rar.u{background:var(--r-u)}.rar.r{background:var(--r-r)}.rar.m{background:var(--r-m)}.rar.t{background:var(--faint)}
 .slot.reveal .face{animation:flip .5s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--i)*55ms)}
 @keyframes flip{from{transform:perspective(600px) rotateY(80deg) translateY(8px);opacity:0}to{transform:none;opacity:1}}
+.fliphint{grid-column:1/-1;margin:0;font-size:13px}
+.slot.down .face{opacity:.5}
+.slot.down .face.nextc{opacity:1;cursor:pointer;box-shadow:0 0 0 2px var(--prism);animation:nudge 1.8s ease-in-out infinite}
+@keyframes nudge{50%{transform:translateY(-4px)}}
+.slot.hit-r .face{box-shadow:0 0 0 2px var(--r-r),0 0 24px 2px color-mix(in srgb,var(--r-r) 55%,transparent)}
+.slot.hit-m .face{box-shadow:0 0 0 2px var(--r-m),0 0 28px 4px color-mix(in srgb,var(--r-m) 60%,transparent)}
 .pool-sum{margin-top:28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
 .sumbox{background:var(--felt2);border:1px solid var(--line);border-radius:8px;padding:14px}
 .sumbox h3{font-size:14px;margin-bottom:10px}
@@ -551,27 +557,67 @@ const P={
   foil:[[49.5,'c'],[40.5,'u'],[6,'r'],[1.2,'m'],[.841,'be-u'],[.294,'be-r'],[.070,'be-m'],[.593,'bt-u'],[.350,'bt-r'],[.035,'bt-m'],[.420,'ss-r'],[.082,'ss-m'],[.117,'pv-r']],
   land:[[14.6,'basic'],[3.6,'basic-f'],[21.8,'tw'],[5.5,'tw-f'],[43.6,'dual'],[10.9,'dual-f']],
 };
-// Probabilità che una carta eco di rarità r sia borderless, dato che quella carta ha una versione borderless.
-const BE_P={};['u','r','m'].forEach(r=>{const base=P.echo.find(t=>t[1]===r)[0],be=P.echo.find(t=>t[1]==='be-'+r)[0];
-  const share=byR(ECHO_ALL,r).filter(c=>BE_OF[c.id]).length/byR(ECHO_ALL,r).length;BE_P[r]=be/(base+be)/share});
-
-function echoCard(rng,card){const vs=BE_OF[card.id];return vs&&rng()<BE_P[card.r]?asItem(pick(rng,vs),{e:1}):asItem(card,{e:1})}
+// Una variante (Braintwister, Shattered Mirror...) la cui carta base non è già nella busta.
+function pickV(rng,a,taken){for(let i=0;i<80;i++){const c=pick(rng,a);if(!taken.has(c.b)){taken.add(c.b);return c}}return pick(rng,a)}
 // Slot rara/mitica: senza carte eco, con i trattamenti Shattered Mirror, Sculptor's Stronghold, Braintwister e Portal view.
 function rareSlot(rng,taken){const rr=roll(rng,P.rare);
-  if(rr==='r'||rr==='m')return asItem(taken?pickD(rng,SHEET[rr],taken):pick(rng,SHEET[rr]));
-  const [tr,r]=rr.split('-');return asItem(pick(rng,byR(TR[tr],r)))}
+  if(rr==='r'||rr==='m')return asItem(pickD(rng,SHEET[rr],taken));
+  const [tr,r]=rr.split('-');return asItem(pickV(rng,byR(TR[tr],r),taken))}
+// Comuni: come sulla carta, ogni busta prende k carte consecutive da una sequenza di stampa. Wizards dice che le Play Booster
+// bilanciano i colori (Rosewater, "What Are Play Boosters?"); chi ha letto carta per carta una scatola di FRA ha trovato i
+// 5 colori in tutte le 30 buste, con le prime cinque comuni in rotazione fissa (per esempio W B G U R). La sequenza vera non
+// è pubblicata; questa la imita. Una passata fa 12 giri di W B G U R: le caselle di colore tengono le 55 monocolore e 5
+// multicolore (una per colore, di un suo colore), e dopo 11 giri una casella libera tiene una delle altre 5 multicolore o
+// delle 6 incolori. Due passate con ordini diversi, e con le multicolore che si scambiano i posti. Così ogni comune esce
+// con la stessa frequenza, 6 o 7 comuni consecutive hanno sempre i 5 colori e mai più di 2 dello stesso, e non ci sono
+// doppioni, perché le due copie di una comune stanno lontane.
+const ROT=['W','B','G','U','R'];
+const COMMON_SEQ=(()=>{const rng=mulberry(hashStr('FRA-comuni'));
+  const shuf=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+  const gold=SHEET.c.filter(c=>c.c.length>1),other=SHEET.c.filter(c=>!c.c);
+  // Una multicolore per colore, tutte diverse: la prima assegnazione che funziona, provando le carte nell'ordine dato.
+  const match=gs=>{const res=[];const go=i=>{if(i===ROT.length)return true;for(const g of gs)if(g.c.includes(ROT[i])&&!res.includes(g)){res[i]=g;if(go(i+1))return true}res.length=i;return false};return go(0)?res:null};
+  const pass=inSlot=>{const col=ROT.map((k,i)=>shuf(SHEET.c.filter(c=>c.c===k).concat(inSlot[i]))),free=shuf(gold.filter(g=>!inSlot.includes(g)).concat(other));
+    const seq=[];for(let b=0;b<col[0].length;b++){col.forEach(cs=>seq.push(cs[b]));if(b<free.length)seq.push(free[b])}return seq};
+  for(let t=0;;t++){const g1=match(shuf(gold)),g2=match(shuf(gold.filter(g=>!g1.includes(g))))||match(shuf(gold));
+    const seq=pass(g1).concat(pass(g2)),L=seq.length;
+    // Le due copie di ogni comune distano almeno 8 posizioni (le comuni di una busta sono al massimo 7).
+    const far=seq.every((c,i)=>{for(let d=1;d<8;d++)if(seq[(i+d)%L]===c)return false;return true});
+    if(far||t>200)return seq}})();
+function commons(rng,k,taken){const L=COMMON_SEQ.length,s=Math.floor(rng()*L),cs=[];
+  for(let j=0;j<k;j++)cs.push(COMMON_SEQ[(s+j)%L]);cs.forEach(c=>taken.add(c.id));return cs}
+// Carte eco: sul foglio le due carte di ogni coppia stanno affiancate (1A 1B 2A 2B...) e ogni busta prende tre carte
+// consecutive (Mark Rosewater): la coppia intera più la carta vicina di un'altra coppia, dopo (1A 1B 2A) o prima (1B 2A 2B).
+// Chi ha aperto le buste lo conferma: sempre una coppia e una carta sola, mai divise, nei due ordini. Il foglio vero non si
+// conosce, quindi la coppia e la vicina si pescano con le percentuali per carta dell'articolo. Le borderless sono 15 coppie
+// intere e nei video escono raggruppate (coppie borderless, a volte tre carte borderless): accanto a una borderless la vicina
+// è borderless una volta su due (Q_BL, stima nostra), e la catena tiene le frequenze per carta dell'articolo.
+const Q_BL=.5;
+const ECHO_INST=(()=>{const out=[];['u','r','m'].forEach(r=>{const reg=P.echo.find(t=>t[1]===r)[0],bl=P.echo.find(t=>t[1]==='be-'+r)[0];
+  const gs=ECHO[r].groups.map(g=>g.slice().sort((x,y)=>N(x)-N(y))),bgs=gs.filter(g=>g.every(c=>BE_OF[c.id]));
+  gs.forEach(g=>out.push({w:reg/gs.length,g,key:g[0].id,bl:0,cards:g}));
+  bgs.forEach(g=>out.push({w:bl/bgs.length,g,key:g[0].id,bl:1,cards:g.map(c=>BE_OF[c.id][0])}))});return out})();
+const BL_SHARE=ECHO_INST.filter(x=>x.bl).reduce((a,x)=>a+x.w,0)/ECHO_INST.reduce((a,x)=>a+x.w,0);
+const P_TO_BL=BL_SHARE*(1-Q_BL)/(1-BL_SHARE);
+const echoPick=(rng,f)=>roll(rng,ECHO_INST.filter(f).map(x=>[x.w,x]));
+function echoBlock(rng,taken){const x=echoPick(rng,()=>true);const bl=rng()<(x.bl?Q_BL:P_TO_BL);const y=echoPick(rng,i=>i.bl===+bl&&i.key!==x.key);
+  x.g.concat(y.g).forEach(c=>taken.add(c.id));
+  const [a,b]=x.cards.map(c=>asItem(c,{e:1}));return rng()<.5?[a,b,asItem(y.cards[0],{e:1})]:[asItem(y.cards[1],{e:1}),a,b]}
+// Le carte escono nell'ordine in cui stanno nella busta, dal davanti. Così le ha trovate chi ha aperto FRA (anche il video
+// ufficiale WeeklyMTG): comuni, le due non comuni (la Braintwister per prima), le tre carte eco, la Special Guest se c'è,
+// rara, foil, terra e in fondo la pedina. Chi sfoglia trova quindi la rara verso la fine.
 function booster(rng){
   const taken=new Set(),out=[];const add=(it,slot)=>{it.s=slot;out.push(it)};
-  const guest=rng()<P.guest;
-  for(let i=0;i<6;i++){if(guest&&i===5)add(asItem(pick(rng,GUESTS),{sg:1}),'sg');else add(asItem(pickD(rng,SHEET.c,taken)),'c')}
-  add(roll(rng,P.unc)==='bt'?asItem(pick(rng,byR(TR.bt,'u'))):asItem(pickD(rng,SHEET.u,taken)),'u');
-  const cu=roll(rng,P.cu);add(cu==='bt'?asItem(pick(rng,byR(TR.bt,'u'))):asItem(pickD(rng,SHEET[cu],taken)),'cu');
-  // Tre carte eco: due della stessa coppia e della stessa rarità, più una a caso.
-  const rarOf=t=>t.replace('be-','');
-  const pr=rarOf(roll(rng,P.echo));const grp=pick(rng,ECHO[pr].groups);const a=pick(rng,grp);let b=a;while(b===a)b=pick(rng,grp);taken.add(a.id);taken.add(b.id);
-  add(echoCard(rng,a),'e');add(echoCard(rng,b),'e');
-  add(echoCard(rng,pickD(rng,ECHO[rarOf(roll(rng,P.echo))].all,taken)),'e');
+  const guest=rng()<P.guest,cu=roll(rng,P.cu);
+  // In 1 busta su 55 una Special Guest prende il posto di una comune; se lo slot comune/non comune dà una comune, è la settima.
+  const cs=commons(rng,(guest?5:6)+(cu==='c'?1:0),taken);
+  cs.forEach((c,i)=>add(asItem(c),cu==='c'&&i===cs.length-1?'cu':'c'));
+  const u=[[roll(rng,P.unc),'u']];if(cu!=='c')u.push([cu,'cu']);
+  u.map(([t,sl])=>[t==='bt'?asItem(pickV(rng,byR(TR.bt,'u'),taken)):asItem(pickD(rng,SHEET.u,taken)),sl]).sort((x,y)=>!!y[0].v-!!x[0].v).forEach(([it,sl])=>add(it,sl));
+  echoBlock(rng,taken).forEach(it=>add(it,'e'));
+  if(guest)add(asItem(pick(rng,GUESTS),{sg:1}),'sg');
   add(rareSlot(rng,taken),'r');
+  // La foil viene da un foglio a parte: può ripetere una carta della busta (circa 1 busta su 16).
   const fr=roll(rng,P.foil);
   if(fr==='c')add(asItem(pick(rng,SHEET.c)),'f');
   else if('urm'.includes(fr))add(asItem(pick(rng,SHEET[fr].concat(byR(ECHO_ALL,fr)))),'f');
@@ -582,12 +628,15 @@ function booster(rng){
   add({c:pick(rng,TOKENS).id,k:1},'k'); // pedina / segnalini: non entra nel pool
   return out;
 }
+// Promo del Kit: "1 Traditional foil rare or mythic rare card". Da Lorwyn Eclipsed non ha più il timbro dell'anno, quindi è
+// una rara o mitica qualunque del set principale (carte eco comprese), in cornice normale e foil tradizionale. Wizards non
+// dà il rapporto: come taw/MTGJSON per i set precedenti, ogni rara pesa 2 e ogni mitica 1 (mitica circa 1 volta su 6).
+const PROMO=[...SHEET.r,...byR(ECHO_ALL,'r')].map(c=>[2,c]).concat([...SHEET.m,...byR(ECHO_ALL,'m')].map(c=>[1,c]));
+const promoCard=rng=>({...asItem(roll(rng,PROMO)),f:1,p:1,s:'p'});
 function makeKit(seed){
   const rng=mulberry(hashStr(seed));
   const boosters=[];for(let i=0;i<6;i++)boosters.push(booster(rng));
-  // Promo del prerelease: "1 traditional foil rare/mythic rare card" (WPN). Wizards non dice da quale lista si pesca;
-  // la modelliamo come Forge ("Prerelease=6 Boosters, 1 RareMythic+"): una pescata dello slot rara, in foil.
-  const promo={...rareSlot(rng),f:1,p:1,s:'p'};
+  const promo=promoCard(rng);
   let n=0;const pool=[];
   boosters.forEach((b,bi)=>b.forEach(x=>{x.u='p'+(n++);x.b=bi;if(x.k||/Basic Land/.test(BY[x.c].t))return;pool.push(x)}));
   promo.u='p'+(n++);promo.b=6;pool.push(promo);
@@ -599,7 +648,7 @@ function makeKit(seed){
 // quindi con 8 Buste a chi apre la Busta 1.
 function makeTeamKit(seed,n){
   const rng=mulberry(hashStr(seed));const boosters=[],promos=[];
-  for(let k=0;k<Math.floor(n/6);k++){for(let i=0;i<6;i++)boosters.push(booster(rng));promos.push({...rareSlot(rng),f:1,p:1,s:'p'})}
+  for(let k=0;k<Math.floor(n/6);k++){for(let i=0;i<6;i++)boosters.push(booster(rng));promos.push(promoCard(rng))}
   while(boosters.length<n)boosters.push(booster(rng));
   let u=0;const pool=[];
   boosters.forEach((b,bi)=>b.forEach(x=>{x.u='p'+(u++);x.b=bi;x.o=bi<n/2?0:1;if(x.k||/Basic Land/.test(BY[x.c].t))return;pool.push(x)}));
@@ -990,19 +1039,27 @@ const SLOT_LBL={c:'Comune',sg:'Special Guest',u:'Non comune',cu:'Com./Non com.',
 const slotLabel=x=>SLOT_LBL[x.s]+(x.v&&BY[x.v].tr?' · '+TR_NAME[BY[x.v].tr]:'')+(x.f&&x.s!=='f'?' · foil':'');
 const KIT_KIND={0:['Kit individuale','Kit prerelease · 6 Play Booster + promo foil'],8:['Two-Headed Giant · 8 Buste','Two-Headed Giant · Kit di squadra · 1 prerelease kit + 2 Play Booster'],12:['Two-Headed Giant · 12 Buste','Two-Headed Giant · Kit di squadra · 2 prerelease kit']};
 const seatName=o=>'Compagno '+'AB'[o];
+// Sfoglio della Busta appena aperta: come dal vero, le carte si girano una alla volta dal davanti, con la rara verso la fine.
+// FLIP.b è la Busta, FLIP.n quante carte sono già girate; non si salva, e ricaricando la Busta si vede tutta.
+let FLIP={b:-1,n:0};
+const flipping=()=>FLIP.b>=0&&S.boosters[FLIP.b]&&FLIP.n<S.boosters[FLIP.b].length;
+function flipNext(all){if(!flipping())return;FLIP.n=all?S.boosters[FLIP.b].length:FLIP.n+1;S.viewB=FLIP.b;S._anim=all?-1:FLIP.b;renderOpen()}
+document.addEventListener('keydown',e=>{if(VIEW!=='open'||!flipping()||e.target.closest('input,textarea,select,button')||e.ctrlKey||e.metaKey||e.altKey)return;
+  if([' ','Enter','ArrowRight'].includes(e.key)){e.preventDefault();flipNext()}});
 function renderOpen(){
   const el=$('#v-open');const team=S.team||0,n=S.boosters.length,own0=firstOwn(),nOwn=ownCount(),opened=S.opened,allOpen=opened>=nOwn;
   // Le Buste del Compagno si rivedono dopo aver aperto tutte le proprie.
   const canSee=i=>isOwnBooster(i)?i-own0<opened:allOpen;
   const vb=Math.min(S.viewB,n-1);const b=canSee(vb)?S.boosters[vb]:null;const mate=team&&!isOwnBooster(vb);
+  const fl=flipping()&&FLIP.b===vb,shown=i=>!fl||i<FLIP.n;
   const range=o=>`Buste ${o*team/2+1}-${(o+1)*team/2}`+(S.pool.some(x=>x.p&&x.o===o)?' e promo':'');
-  el.innerHTML=`<div class="intro"><div><div class="eyebrow">${KIT_KIND[team][1]}</div><h2>${team?'Apri le tue Buste del Kit di squadra':'Apri il tuo Pool di Reality Fracture'}</h2>${team?`<p>Un solo codice per tutta la squadra: dallo al tuo Compagno e scegliete posti diversi. Ognuno apre le sue Buste (${range(0)} al ${seatName(0)}, ${range(1)} al ${seatName(1)}) e poi può rivedere quelle dell'altro. Nel Mazzo usi le carte di cui sei proprietario, e nella scheda Mazzo puoi darne al Compagno. Le Buste seguono la stessa collation del Kit individuale.</p>`:`<p>Ogni kit nasce da un codice: condividilo e il tuo amico otterrà lo stesso identico Pool. Le buste seguono la collation ufficiale delle Play Booster, con le stesse percentuali: 6 comuni (Special Guest in 1 busta su 55), 2 non comuni, 3 carte «eco» (due della stessa coppia), rara o mitica con i trattamenti Shattered Mirror, Sculptor's Stronghold, Braintwister e Portal view, foil, terra e pedina.</p>`}</div>
+  el.innerHTML=`<div class="intro"><div><div class="eyebrow">${KIT_KIND[team][1]}</div><h2>${team?'Apri le tue Buste del Kit di squadra':'Apri il tuo Pool di Reality Fracture'}</h2>${team?`<p>Un solo codice per tutta la squadra: dallo al tuo Compagno e scegliete posti diversi. Ognuno apre le sue Buste (${range(0)} al ${seatName(0)}, ${range(1)} al ${seatName(1)}) e poi può rivedere quelle dell'altro. Nel Mazzo usi le carte di cui sei proprietario, e nella scheda Mazzo puoi darne al Compagno. Le Buste seguono la stessa collation del Kit individuale.</p>`:`<p>Ogni kit nasce da un codice: condividilo e il tuo amico otterrà lo stesso identico Pool. Le buste seguono la collation delle Play Booster vere, con le percentuali ufficiali, e le carte escono nell'ordine in cui stanno nella busta: 6 comuni di tutti e 5 i colori, 2 non comuni, 3 carte «eco» (una coppia e la carta vicina sul foglio), la Special Guest in 1 busta su 55, rara o mitica con i trattamenti Shattered Mirror, Sculptor's Stronghold, Braintwister e Portal view, foil, terra e pedina.</p>`}</div>
   <div class="kitctl"><div class="seg" role="group" aria-label="Tipo di Kit">${[0,8,12].map(k=>`<button data-kind="${k}" aria-pressed="${team===k}">${KIT_KIND[k][0]}</button>`).join('')}</div>
   ${team?`<div class="seg" role="group" aria-label="Il tuo posto">${[0,1].map(o=>`<button data-seat="${o}" aria-pressed="${S.seat===o}">${seatName(o)} · ${range(o)}</button>`).join('')}</div>`:''}
   <div class="row"><input type="text" id="seed" value="${esc(S.seed)}" aria-label="Codice kit" size="13" class="mono"><button class="btn" id="regen">Carica codice</button><button class="btn pri" id="newkit">Nuovo kit</button></div></div></div>
   <div class="packs" id="packs"></div>
   <div class="row" style="justify-content:space-between;margin-bottom:12px"><h3 style="font-size:16px">${b?`Busta ${vb+1}${mate?` · del ${seatName(1-S.seat)}`:''}`:'Busta ancora chiusa'}</h3>
-  <div class="row">${!allOpen?`<button class="btn pri" id="next">Apri busta ${own0+opened+1}</button><button class="btn" id="all">Apri tutte</button>`:''}<button class="btn warm" id="todeck">Costruisci il Mazzo →</button></div></div>
+  <div class="row">${fl?`<button class="btn" id="flipall">Scopri tutte</button>`:''}${!allOpen?`<button class="btn${fl?'':' pri'}" id="next">Apri busta ${own0+opened+1}</button><button class="btn" id="all">Apri tutte</button>`:''}<button class="btn warm" id="todeck">Costruisci il Mazzo →</button></div></div>
   <div class="pack-grid" id="pgrid"></div>
   <div class="pool-sum" id="psum"></div>`;
   const pk=$('#packs');
@@ -1014,22 +1071,30 @@ function renderOpen(){
     if(team&&(i+1)%(n/2)===0)promoTile(i<n/2?0:1)}
   if(!team)promoTile(0);
   const g=$('#pgrid');
-  if(b){b.forEach((x,i)=>{const s=document.createElement('div');s.className='slot'+(S._anim===vb?' reveal':'');s.style.setProperty('--i',i);
-    const r=BY[x.c].r;s.innerHTML=`<div class="lbl"><i class="rar ${r}"></i>${slotLabel(x)}</div>`;const f=faceEl(x,{foil:!!x.f});setPreviewAttrs(f,x);s.appendChild(f);g.appendChild(s)})}
+  if(b){b.forEach((x,i)=>{const s=document.createElement('div');
+    // Durante lo sfoglio si anima solo la carta appena girata; senza sfoglio tutte, una dopo l'altra.
+    const just=fl||FLIP.b===vb?S._anim===vb&&i===FLIP.n-1:S._anim===vb;
+    s.className='slot'+(just?' reveal':'')+(just&&FLIP.b===vb&&'rm'.includes(BY[x.c].r)?' hit-'+BY[x.c].r:'');s.style.setProperty('--i',FLIP.b===vb?0:i);
+    if(!shown(i)){s.classList.add('down');s.innerHTML='<div class="lbl">&nbsp;</div>';const f=faceEl({c:'?'},{back:true});
+      if(i===FLIP.n){f.classList.add('nextc');f.title='Gira la carta (Spazio)';f.onclick=()=>flipNext()}s.appendChild(f);g.appendChild(s);return}
+    const r=BY[x.c].r;s.innerHTML=`<div class="lbl"><i class="rar ${r}"></i>${slotLabel(x)}</div>`;const f=faceEl(x,{foil:!!x.f});setPreviewAttrs(f,x);s.appendChild(f);g.appendChild(s)})
+    if(fl)g.insertAdjacentHTML('afterbegin',`<p class="fliphint muted">Sfogli la busta dal davanti, come dal vero: clicca la carta coperta o premi Spazio. La rara è verso la fine. ${FLIP.n}/${b.length}</p>`)}
   else{g.innerHTML='<div class="nog">Premi «Apri busta» per scoprire le carte.</div>'}
   S._anim=-1;
   // Riepilogo delle proprie carte aperte; con tutte aperte, anche le rare del Compagno.
-  const mine=openedPool();const seen=mine.filter(x=>x.p?allOpen:x.b-own0<opened);
+  const down=new Set(flipping()?S.boosters[FLIP.b].slice(FLIP.n).map(x=>x.u):[]);
+  const mine=openedPool();const seen=mine.filter(x=>(x.p?allOpen:x.b-own0<opened)&&!down.has(x.u));
   const rank=(a,b)=>'mr'.indexOf(BY[a.c].r)-'mr'.indexOf(BY[b.c].r);const isHit=x=>'rm'.includes(BY[x.c].r);
   const hits=seen.filter(isHit).sort(rank);const mateHits=team&&allOpen?S.pool.filter(x=>x.o!==S.seat&&isHit(x)).sort(rank):[];
   const hit=(x,note)=>`<div class="hit" data-cid="${x.c}"${x.v?` data-v="${x.v}"`:''}><i class="rar ${BY[x.c].r}"></i><span class="n">${esc(BY[x.c].n)}${x.p?' <span class="muted">(promo)</span>':''}${note?` <span class="muted">(${note})</span>`:''}</span><span>${mana(BY[x.c].f[0].m||'')}</span></div>`;
   const cnt={W:0,U:0,B:0,R:0,G:0};seen.forEach(x=>[...BY[x.c].c].forEach(k=>cnt[k]++));const mx=Math.max(1,...Object.values(cnt));
   $('#psum').innerHTML=`<div class="sumbox"><h3>${team?'Le tue rare e mitiche':'Rare e mitiche'} (${hits.length})</h3><div class="hits">${hits.map(x=>hit(x)).join('')||'<span class="muted">Nessuna ancora.</span>'}${mateHits.map(x=>hit(x,seatName(x.o))).join('')}</div></div>
   <div class="sumbox"><h3>Profondità per colore</h3><div class="bars">${COLORS.map(k=>`<div class="bar"><span class="ms ${k}"></span><i style="width:${cnt[k]/mx*100}%;background:var(--m${k})"></i><span class="mono muted">${cnt[k]}</span></div>`).join('')}</div><p class="muted" style="margin:10px 0 0;font-size:12px">${seen.length} carte aperte su ${mine.length}${team?`, le tue; il Pool di squadra ne ha ${S.pool.length}`:''}. Le scuole di Hexhaven: Fatehold (WU), Theorix (UB), Stingerquill (BR), Konstrari (RG), Vigorbloom (GW).</p></div>`;
-  $('#next')&&($('#next').onclick=()=>{S.opened++;S.viewB=own0+S.opened-1;S._anim=S.viewB;saveS();renderOpen()});
-  $('#all')&&($('#all').onclick=()=>{S.opened=nOwn;S.viewB=own0+nOwn-1;S._anim=S.viewB;saveS();renderOpen()});
+  $('#next')&&($('#next').onclick=()=>{S.opened++;S.viewB=own0+S.opened-1;FLIP={b:S.viewB,n:0};S._anim=-1;saveS();renderOpen()});
+  $('#all')&&($('#all').onclick=()=>{S.opened=nOwn;S.viewB=own0+nOwn-1;FLIP={b:-1,n:0};S._anim=S.viewB;saveS();renderOpen()});
+  $('#flipall')&&($('#flipall').onclick=()=>flipNext(true));
   $('#todeck').onclick=()=>{S.opened=nOwn;saveS();go('deck')};
-  const open_=(code,msg)=>{freshKit(code);S._anim=S.viewB;const tm=timerNewKit();renderOpen();toast(msg+S.seed+(tm?' · timer avviato':''))};
+  const open_=(code,msg)=>{freshKit(code);FLIP={b:S.viewB,n:0};S._anim=-1;const tm=timerNewKit();renderOpen();toast(msg+S.seed+(tm?' · timer avviato':''))};
   // Un kit nuovo sostituisce il Pool e svuota il Mazzo: se il Mazzo non è salvato si chiede prima (niente confirm(), che nell'Artifact è bloccato).
   const load=(code,msg)=>{const n=kitLoss();if(!n){open_(code,msg);return}
     openModal('Il tuo Mazzo non è salvato',m=>{
@@ -1041,7 +1106,7 @@ function renderOpen(){
   publish();
   $('#newkit').onclick=()=>load(newSeed(team),'Nuovo kit: ');
   el.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{if(+b.dataset.kind!==team)load(newSeed(+b.dataset.kind),'Nuovo kit: ')});
-  el.querySelectorAll('[data-seat]').forEach(b=>b.onclick=()=>{setSeat(+b.dataset.seat);S._anim=S.viewB;renderOpen()});
+  el.querySelectorAll('[data-seat]').forEach(b=>b.onclick=()=>{setSeat(+b.dataset.seat);FLIP={b:S.viewB,n:0};S._anim=-1;renderOpen()});
   $('#regen').onclick=()=>{const v=$('#seed').value.trim();if(v)load(v,'Kit caricato: ')};
 }
 
