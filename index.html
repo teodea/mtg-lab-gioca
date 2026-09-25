@@ -18,7 +18,7 @@
 [hidden]{display:none!important}
 html,body{background:var(--ground);color:var(--text)}
 body{font:14px/1.45 var(--body);margin:0;padding-inline:16px;padding-block:0 32px;min-height:100%}
-button,input,select{font:inherit;color:inherit}
+button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--prism);outline-offset:2px}
 h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.02em;text-wrap:balance;margin:0}
@@ -26,7 +26,7 @@ h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.02em;text-wr
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
 /* header */
-.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:linear-gradient(var(--ground) 80%,transparent);display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding-block:14px 12px;margin-inline:-16px;padding-inline:16px}
+.top{color:var(--text);position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:linear-gradient(var(--ground) 80%,transparent);display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding-block:14px 12px;margin-inline:-16px;padding-inline:16px}
 .brand{display:flex;align-items:baseline;gap:10px}
 .brand h1{font-size:19px}
 .brand .set{font:500 11px var(--mono);color:var(--prism);border:1px solid color-mix(in srgb,var(--prism) 45%,transparent);padding:1px 6px;border-radius:3px;letter-spacing:.08em}
@@ -48,7 +48,7 @@ h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.02em;text-wr
 .tmbig{font-size:clamp(44px,12vw,64px);font-weight:600;line-height:1;letter-spacing:.02em}
 .tmbig.on{color:var(--good)}.tmbig.warn{color:var(--ember)}.tmbig.bad{color:var(--bad)}
 
-.btn{background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:6px 12px;font-weight:500;white-space:nowrap}
+.btn{background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 12px;font-weight:500;white-space:nowrap}
 .btn:hover{border-color:var(--faint)}
 .btn.pri{background:var(--prism);color:var(--prism-ink);border-color:var(--prism)}
 .btn.pri:hover{filter:brightness(1.08)}
@@ -56,7 +56,7 @@ h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.02em;text-wr
 .btn.sm{padding:3px 8px;font-size:12px}
 .btn:disabled{opacity:.45;cursor:default}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-input[type=text],input[type=search],input[type=number],select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px}
+input[type=text],input[type=search],input[type=number],select,textarea{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px}
 .eyebrow{font:500 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 
 /* card faces */
