@@ -113,6 +113,63 @@ input[type=text],input[type=number],select{background:var(--surface);border:1px 
 .bar i{display:block;height:8px;border-radius:4px;background:var(--mC)}
 
 /* deck builder */
+/* Costruttore (ADR 0005): Pile a sinistra, colonna del Pool a destra, ferma mentre la pagina scorre. */
+.bld{display:grid;grid-template-columns:minmax(0,1fr) var(--pw,clamp(270px,24vw,360px));gap:16px;align-items:start}
+.bmain{min-width:0}
+/* Nella colonna più stretta le Pile si restringono fino al minimo prima di far scorrere la zona. */
+.bld .zgrid{flex:0 1 auto}
+.bpool{--ptop:74px;position:sticky;top:var(--ptop);max-height:calc(100vh - var(--ptop) - 48px);overflow:auto;overscroll-behavior:contain;background:var(--felt2);border:1px solid var(--line);border-radius:10px;padding:10px 10px 12px;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.mbody .bpool{--ptop:0px;max-height:calc(88vh - 150px)}
+.zdrag .bpool{border-color:color-mix(in srgb,var(--prism) 55%,var(--line))}
+.bpool.drop-hot{box-shadow:inset 0 0 0 2px var(--prism)}
+.phandle{display:none}
+.phead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.phead .seg{margin-left:auto}
+.phead .seg button,.pfilt .seg button{padding:4px 9px}
+.pcount{font-size:11.5px;color:var(--muted)}
+.pfilt{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12px}
+.pfilt .seg button{padding:4px 6px}
+.pfilt .seg button[aria-pressed="false"] .ms{opacity:.55}
+.ponly{display:flex;align-items:center;gap:5px;color:var(--muted);cursor:pointer}
+.bpool .pairs{margin:0}
+.pgh{display:flex;justify-content:space-between;font:500 11px var(--mono);letter-spacing:.06em;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--line);padding:8px 2px 3px;margin-bottom:2px}
+.pgh span:last-child{color:var(--faint)}
+.prow{display:grid;grid-template-columns:minmax(3.2em,auto) minmax(0,1fr) auto 1.4em;gap:8px;align-items:center;padding:3px 4px;border-radius:5px;font-size:13px;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.prow:hover{background:var(--surface)}
+.prow .pcost{white-space:nowrap;font-size:12px;text-align:right}
+.prow .pn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow .pfoil{color:var(--prism);font-size:10px}
+.prow .pwr{font:500 11px var(--mono);color:var(--muted)}
+.prow .pwr.low{color:var(--faint)}
+.prow .pmk{font:600 10px var(--mono);text-align:center;border-radius:3px;line-height:1.6}
+.prow.m{opacity:.5}
+.prow.m .pmk{background:var(--prism);color:var(--prism-ink)}
+.prow.s .pmk{background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
+.prow.dim{opacity:.22}
+.prow.drag-src{opacity:.3}
+.pgrid{display:flex;flex-wrap:wrap;gap:10px 8px}
+.pcol{flex:1 0 calc(62px*var(--cs));max-width:calc(96px*var(--cs))}
+.pcol h4{margin:0 0 4px;font:500 10px var(--mono);color:var(--muted);letter-spacing:.04em;display:flex;justify-content:space-between;gap:4px;white-space:nowrap;overflow:hidden}
+.bpool .card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.bpool .card.in-m .face{opacity:.45}
+.bpool .card.dim .face{opacity:.22;filter:grayscale(.7)}
+.bpool .card.drag-src{opacity:.3}
+.bpool .mtag{top:2px;right:2px;font-size:8px;padding:0 3px}
+.sbtog{background:none;border:1px solid var(--line);border-radius:5px;width:24px;height:24px;padding:0;color:var(--muted);line-height:1}
+.sbtog:hover{color:var(--text);border-color:var(--faint)}
+.mbox.wide{width:min(1400px,100%);max-height:94vh}
+/* Su schermo stretto la colonna del Pool diventa un pannello che si apre dal basso (come in Arena sul telefono). */
+@media (max-width:760px){
+  .bld{grid-template-columns:minmax(0,1fr)}
+  #v-deck{padding-bottom:56px}
+  .bpool,.mbody .bpool{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:40;margin:0;border-radius:12px 12px 0 0;max-height:46px;overflow:hidden;padding:0 12px 12px;box-shadow:0 -8px 24px rgba(0,0,0,.5)}
+  .bpool.open{max-height:72vh;overflow:auto}
+  .zdrag .bpool.open{max-height:46px;overflow:hidden}
+  .phandle{display:flex;position:sticky;top:0;z-index:2;justify-content:space-between;align-items:center;gap:10px;width:calc(100% + 24px);margin:0 -12px;padding:12px 16px;background:var(--felt2);border:0;border-bottom:1px solid var(--line);font-weight:600}
+  .phandle .mono{font-weight:500;color:var(--muted);font-size:12px;margin-left:auto}
+  .phead .eyebrow,.phead .pcount{display:none}
+  .phead .seg{margin-left:0}
+}
 .dtool{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding-block:8px 14px;border-bottom:1px solid var(--line)}
 .count{font:600 22px var(--mono)}
 .count.ok{color:var(--good)}
@@ -126,8 +183,6 @@ input[type=text],input[type=number],select{background:var(--surface);border:1px 
 /* Pile: le colonne in orizzontale, le righe una sotto l'altra; in fondo una colonna vuota per crearne una nuova. */
 .zwrap{display:flex;gap:10px;align-items:flex-start;overflow-x:auto;padding-block:12px}
 .zgrid{display:grid;grid-template-columns:repeat(var(--nc),minmax(calc(96px*var(--cs)),calc(150px*var(--cs))));gap:8px 10px;flex:none;min-width:0}
-.zwrap.sb{padding-block:8px}
-.zwrap.sb .zgrid{grid-template-columns:repeat(var(--nc),calc(84px*var(--cs)))}
 .ph{font:500 11px var(--mono);color:var(--muted);letter-spacing:.06em;display:flex;gap:6px;align-self:end;overflow:hidden;white-space:nowrap}
 .ph .n,.rowlbl .n{color:var(--faint)}
 .rowlbl{grid-column:1/-1;font:500 11px var(--mono);color:var(--faint);letter-spacing:.06em;border-top:1px dashed var(--line);padding-top:6px}
@@ -154,6 +209,7 @@ input[type=text],input[type=number],select{background:var(--surface);border:1px 
 .bsrc{flex-basis:100%;text-align:center;font-size:10.5px;line-height:1.3;color:var(--muted);cursor:help}
 .bsrc span{white-space:nowrap}
 .bsrc.short{color:var(--bad)}
+.bsrc .bcard{display:block;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
 .stats{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12.5px}
 .curve{display:flex;align-items:flex-end;gap:3px;height:34px}
 .curve div{width:14px;background:var(--prism);opacity:.8;border-radius:2px 2px 0 0;min-height:2px;position:relative}
@@ -182,10 +238,7 @@ input[type=text],input[type=number],select{background:var(--surface);border:1px 
 .mscore{font:600 12.5px var(--mono);letter-spacing:.02em;padding:4px 9px;border-radius:6px;background:var(--surface2);border:1px solid var(--line)}
 .mscore.won{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 .mscore.lost{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
-.sbh{font-size:13px;color:var(--muted);font-weight:600;margin:4px 0 -4px}
 .mgrid>.nog,.mgrid>.muted{grid-column:1/-1}
-.basics.sbb{flex-direction:row;flex-wrap:wrap;margin-top:0}
-.basics.sbb .bstep{min-width:92px}
 details>summary{cursor:pointer}
 .savedas{font-size:12.5px;color:var(--muted);max-width:26ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .savedas b{color:var(--ember);font-weight:600}
@@ -356,8 +409,9 @@ safe-buffer/index.js:
   (*! regenerator-runtime -- Copyright (c) 2014-present, Facebook, Inc. -- license (MIT): https://github.com/babel/babel/blob/main/packages/babel-helpers/LICENSE *)
 */
 
-// La capability `room` di claude.ai rifatta sopra broker MQTT pubblici, per la versione web che si apre senza login.
-// Implementa solo ciò che usa l'app (presence, onPeers, onConnection), come dev/mock-room.js, più leave(), resume() e link.
+// La Stanza online sopra broker MQTT pubblici (ADR 0003): la pagina si apre con un link, senza login.
+// L'app usa presence, onPeers, onConnection e link, come in dev/mock-room.js; leave() e resume() servono alla pagina.
+// La presence di ciascuno resta sotto i 4 KiB, per tenere piccoli i messaggi sui broker pubblici.
 //
 // Ogni scheda tiene la sua presence in un messaggio retained su mtglab/v1/<stanza>/p/<peer>: chi arriva dopo la trova
 // subito. Il Last Will (payload vuoto e retained) la cancella se la scheda cade senza salutare; se neanche il Last Will
@@ -366,7 +420,7 @@ safe-buffer/index.js:
 // perché hb viene dall'orologio di chi scrive, che può essere sfasato di qualche minuto.
 // Ci si collega a più broker insieme e si uniscono i peer, così basta che uno risponda: un peer sparisce solo quando
 // è uscito da tutti i broker su cui c'era, e tra due copie della sua presence vale quella con at più recente.
-// Come nella room vera, updatedAt di un peer cambia solo quando cambia la sua presence, non con il battito.
+// updatedAt di un peer cambia solo quando cambia la sua presence, non con il battito.
 const MQTT_BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
 const HEARTBEAT_MS = 60000, SILENT_MS = 3 * 60000, GHOST_MS = 10 * 60000;
 
@@ -376,8 +430,8 @@ function mqttRoom({ urls, connect, room, me, browser, now = Date.now, every = se
   const peers = new Map(); // peer -> {b, p, js, at, sat: at di chi scrive, seen, on: broker su cui c'è}
   const peerH = new Set(), connH = new Set();
   const snapshot = () => [
-    { peer: me, by: null, isMe: true, sameTab: true, kind: 'viewer', guest: false, presence, updatedAt: sentAt || now() },
-    ...[...peers].map(([peer, o]) => ({ peer, by: null, isMe: o.b === browser, sameTab: false, kind: 'viewer', guest: false, presence: o.p, updatedAt: o.at })),
+    { peer: me, isMe: true, sameTab: true, presence, updatedAt: sentAt || now() },
+    ...[...peers].map(([peer, o]) => ({ peer, isMe: o.b === browser, sameTab: false, presence: o.p, updatedAt: o.at })),
   ];
   const emitPeers = () => { const ps = snapshot(); peerH.forEach(h => h({ peers: ps, joined: [], left: [], updated: [] })); };
   const setConn = () => { const c = clients.some(x => x.connected); if (c !== conn) { conn = c; connH.forEach(h => h(c)); } };
@@ -475,7 +529,7 @@ if (typeof window !== 'undefined') (() => {
     // Il link di un'altra stanza aperto nella stessa scheda cambia solo l'hash: si ricarica per entrarci.
     addEventListener('hashchange', () => { const c = inLink(); if (c && c !== code) { put('mtglab-stanza', c); location.reload(); } });
   }
-  window.claude = { use: async name => (name === 'room' ? r : null) };
+  window.STANZA = r;
 })();
 </script>
 <script>
@@ -745,6 +799,22 @@ function sourcesNeeded(uids,pool){
       if(!r[k]||need>r[k].need)r[k]=splash.has(k)?{need,card:c,splash:true}:{need,card:c}})});
   return r;
 }
+// La probabilità di avere almeno p fonti di un colore al turno t, in partenza, avendo pescato almeno t terre (il modello di Karsten,
+// senza i mulligan: alle soglie di KARSTEN40 dà circa il 90%). n carte nel Mazzo, l terre, s fonti di quel colore.
+function curveOdds(s,p,t,l,n){const C=(a,b)=>{if(b<0||b>a)return 0;let r=1;for(let i=1;i<=b;i++)r=r*(a-b+i)/i;return r};
+  const seen=Math.min(n,6+t);let ok=0,all=0;
+  for(let a=0;a<=Math.min(s,seen);a++)for(let b=0;b<=Math.min(l-s,seen-a);b++){const w=C(s,a)*C(l-s,b)*C(n-l,seen-a-b);if(a+b>=t){all+=w;if(a>=p)ok+=w}}
+  return all?ok/all:0}
+// Per ogni colore la carta non terra più difficile da lanciare al suo turno con le terre del Mazzo e le basi di basics:
+// {B:{card:'123',turn:2,odds:.63}}.
+function castOdds(uids,pool,basics={}){
+  const byU=byUid(pool),cards=uids.map(u=>byU[u]).filter(Boolean),src=landSources(uids,pool,basics);
+  const lands=cards.filter(x=>isLand(x.c)).length+COLORS.reduce((a,k)=>a+(basics[k]||0),0),n=cards.length+COLORS.reduce((a,k)=>a+(basics[k]||0),0);
+  const spells=cards.filter(x=>!isLand(x.c)).map(x=>x.c);
+  const cols=new Set(spells.flatMap(c=>((BY[c].f[0].m||'').match(/\{[WUBRG]\}/g)||[]).map(s=>s[1])));const r={};
+  spells.forEach(c=>{const p=costPips(c,cols);Object.keys(p).forEach(k=>{const turn=Math.max(1,Math.round(BY[c].v||0)),odds=curveOdds(src[k],p[k],turn,lands,n);
+    if(!r[k]||odds<r[k].odds)r[k]={card:c,turn,odds}})});
+  return r}
 // Le fonti di ogni colore tra le terre del Mazzo (una doppia conta per entrambi i colori), più le terre base di basics.
 function landSources(uids,pool,basics={}){const byU=byUid(pool);const o={};COLORS.forEach(k=>o[k]=basics[k]||0);
   uids.forEach(u=>{const x=byU[u];if(x&&isLand(x.c))COLORS.forEach(k=>{if((BY[x.c].pm||'').includes(k))o[k]++})});
@@ -826,14 +896,14 @@ document.addEventListener('mouseover',e=>{hoverU=e.target.closest('[data-u]')?.d
 // Carta ingrandita accanto a quella cliccata con il tasto destro; un altro clic, destro o sinistro, la chiude.
 let zoomSrc=null;
 const zoomKey=el=>el&&(el.dataset.u||el);
-// acts: bottoni sotto la carta, come [etichetta, funzione].
-function showZoom(o,anchor,{text=false,acts=[]}={}){
+// acts: bottoni sotto la carta, come [etichetta, funzione]. width: larghezza fissa, per l'anteprima della lista del Pool.
+function showZoom(o,anchor,{text=false,acts=[],width=0}={}){
   const l=$('#lens');l.innerHTML='';l.appendChild(faceEl(o));
   if(text){const t=document.createElement('div');t.className='pvtext';t.innerHTML=previewHTML(o.c,o.tn,o.pt,o.v);l.appendChild(t)}
   if(acts.length){const r=document.createElement('div');r.className='lensact';acts.forEach(([lbl,fn])=>{const b=document.createElement('button');b.className='btn pri';b.textContent=lbl;b.onclick=fn;r.appendChild(b)});l.appendChild(r)}
   l.hidden=false;zoomSrc=zoomKey(anchor)||null;
   const r=anchor?anchor.getBoundingClientRect():{left:innerWidth/2,right:innerWidth/2,top:80,width:0};
-  const w=Math.round(Math.min(Math.max(300,r.width*1.6),innerWidth-32,(innerHeight-32)/CARD_H));l.style.width=w+'px';
+  const w=Math.round(Math.min(width||Math.max(300,r.width*1.6),innerWidth-32,(innerHeight-32)/CARD_H));l.style.width=w+'px';
   const room=innerWidth-r.right-12,x=room>=w+8?r.right+12:r.left-12-w>=8?r.left-12-w:(innerWidth-w)/2;
   const h=l.getBoundingClientRect().height;l.style.left=Math.round(x)+'px';l.style.top=Math.round(Math.max(8,Math.min(r.top,innerHeight-h-8)))+'px';
 }
@@ -869,7 +939,8 @@ document.documentElement.style.setProperty('--cs',CS);
 /* 40-state.js */
 // v2: pool con varianti (v) e slot (s). I salvataggi v1 vengono ignorati.
 // Chiavi con il prefisso del progetto; la vecchia chiave senza prefisso viene ancora letta una volta.
-// deck: uid delle carte nel Mazzo. Il Sideboard è tutto il resto delle proprie carte del Pool (zoneUids).
+// deck: uid delle carte nel Mazzo. Il Sideboard è tutto il resto delle proprie carte del Pool (sideboard()); sb: quelle che il
+// giocatore ha messo nelle Pile del Sideboard, le altre restano nella colonna del Pool (ADR 0006).
 // lay: la disposizione in Pile delle due zone (vedi sotto). saveId: il Mazzo salvato da cui viene lo stato attuale.
 let S=LS.get('mtg-lab:fra-sealed-v2',LS.get('fra-sealed-v2',null));
 function saveS(){LS.set('mtg-lab:fra-sealed-v2',S)}
@@ -911,9 +982,11 @@ const ordCmp=o=>okOrder(o)?ORDERS[o].cmp:byCost;
 // stende al tavolo, con le rare e le mitiche in una riga sotto le comuni e le non comuni.
 const ZONE_DEF={deck:{c:'cmc',r:'rc',o:'cmc'},side:{c:'col',r:'rr',o:'cmc'}};
 const ZONES=['deck','side'];
-// Gli uid di una zona: il Mazzo, oppure le proprie carte del Pool che non ci sono (il Sideboard).
-function zoneUids(s,z){const own=myPool(s);if(z==='deck'){const mine=new Set(own.map(x=>x.u));return s.deck.filter(u=>mine.has(u))}
-  const d=new Set(s.deck);return own.filter(x=>!d.has(x.u)).map(x=>x.u)}
+// Gli uid di una zona, tra le proprie carte: il Mazzo, oppure le carte messe nelle Pile del Sideboard.
+function zoneUids(s,z){const mine=new Set(myPool(s).map(x=>x.u));if(z==='deck')return s.deck.filter(u=>mine.has(u));
+  const d=new Set(s.deck);return (s.sb||[]).filter(u=>mine.has(u)&&!d.has(u))}
+// Il Sideboard delle regole (CR 100.4b): tutte le proprie carte del Pool fuori dal Mazzo, messe nelle Pile o no.
+function sideboard(s=S){const d=new Set(s.deck);return myPool(s).filter(x=>!d.has(x.u)).map(x=>x.u)}
 // Gli uid di una zona nell'ordine delle Pile: colonna per colonna, dall'alto in basso.
 const pileOrder=(z,s=S)=>(s.lay?.[z]?.p||[]).flatMap(col=>col.flat());
 // Disposizione automatica: una colonna e una riga per ogni chiave presente, nell'ordine del criterio, e le carte nell'ordine scelto.
@@ -941,10 +1014,13 @@ function syncZone(s,name){const byU=byUid(s.pool),want=zoneUids(s,name),z=s.lay[
 function syncLay(s=S){if(!s.lay||typeof s.lay!=='object')s.lay={};ZONES.forEach(n=>syncZone(s,n));return s.lay}
 // Ridispone una zona da capo, con le sue impostazioni.
 function resetZone(name,s=S){if(!s.lay)s.lay={};const z=s.lay[name];s.lay[name]=z?{c:z.c,r:z.r,o:z.o}:null;syncZone(s,name)}
-// Sposta una carta nella zona 'deck' o 'side'. Senza col va nella Pila delle sue chiavi; con col e row nella Pila indicata,
-// alla posizione pos (contata senza la carta spostata). Una colonna o una riga oltre l'ultima ne crea una nuova.
-function placeCard(u,zone,col,row,pos){syncLay();if(zone==='deck'&&!S.deck.includes(u))S.deck.push(u);if(zone==='side')S.deck=S.deck.filter(x=>x!==u);
-  if(col!=null){ZONES.forEach(n=>S.lay[n].p.forEach(c=>c.forEach((p,j)=>c[j]=p.filter(x=>x!==u))));const z=S.lay[zone];row=row??0;
+// Sposta una carta nella zona 'deck' o 'side', o la rimette tra le carte non messe del Pool ('pool'). Senza col va nella Pila
+// delle sue chiavi; con col e row nella Pila indicata, alla posizione pos (contata senza la carta spostata). Una colonna o una riga
+// oltre l'ultima ne crea una nuova.
+function placeCard(u,zone,col,row,pos){syncLay();const sb=(S.sb||[]).filter(x=>x!==u);
+  if(zone==='deck'&&!S.deck.includes(u))S.deck.push(u);if(zone!=='deck')S.deck=S.deck.filter(x=>x!==u);
+  if(zone==='side')sb.push(u);S.sb=sb;
+  if(col!=null&&zone!=='pool'){ZONES.forEach(n=>S.lay[n].p.forEach(c=>c.forEach((p,j)=>c[j]=p.filter(x=>x!==u))));const z=S.lay[zone];row=row??0;
     if(col>=z.ck.length){col=z.ck.length;z.ck.push(null);z.p.push(z.rk.map(()=>[]))}
     if(row>=z.rk.length){row=z.rk.length;z.rk.push(null);z.p.forEach(c=>c.push([]))}
     const p=z.p[col][row];p.splice(pos??p.length,0,u)}
@@ -956,7 +1032,13 @@ function migrateLay(o){if(!o||o.lay)return o;const lay={},deck=new Set(o.deck||[
     lay.deck={c:o.grp,r:'none',o:'cmc',ck:cols.map(c=>GROUPS[o.grp].keys.includes(c.k)?c.k:null),rk:['-'],p:cols.map(c=>[c.u.filter(u=>deck.has(u))])}}
   const side=(Array.isArray(o.side)?o.side:[]).filter(u=>!deck.has(u));
   if(side.length){const d=ZONE_DEF.side;lay.side={...d,ck:[null],rk:[GROUPS[d.r].keys[0]],p:[[side]]}}
+  // Il Sideboard scelto a mano è proprio quello che ora sta nelle Pile del Sideboard (sb).
+  if(!Array.isArray(o.sb))o.sb=side;
   delete o.side;delete o.cols;delete o.grp;o.lay=lay;return o}
+// Stati di prima della colonna del Pool (ADR 0006), senza sb: nelle Pile del Sideboard c'era tutto il resto del Pool. Le Pile
+// si svuotano, con le loro impostazioni, e quelle carte tornano tra le non messe; per le regole restano Sideboard.
+function migrateSb(o){if(!o||Array.isArray(o.sb))return o;o.sb=[];const z=o.lay?.side;
+  if(z&&isGrp(z.c)&&isGrp(z.r))o.lay.side=arrangeZone({c:z.c,r:z.r,o:Object.hasOwn(ORDERS,z.o)?z.o:'cmc'},[]);return o}
 // Disposizione letta da un testo non fidato: criteri esistenti, chiavi dei criteri e uid del Pool (us).
 function cleanLay(lay,us){const out={};if(!lay||typeof lay!=='object')return out;
   for(const n of ZONES){const z=lay[n];if(!z||!isGrp(z.c)||!isGrp(z.r)||!Array.isArray(z.ck)||!Array.isArray(z.rk)||!Array.isArray(z.p))continue;
@@ -967,7 +1049,7 @@ function cleanLay(lay,us){const out={};if(!lay||typeof lay!=='object')return out
 // Two-Headed Giant: team = 8 o 12 Buste (0 per il Kit individuale), seat = il posto scelto, 0 per il Compagno A e 1 per il B.
 // opened conta le Buste aperte tra le proprie; viewB è l'indice della Busta guardata, tra tutte quelle del Kit.
 // at: quando è stato aperto il Kit, per capire chi dei due Compagni ha il Kit più recente; matePeer: l'ultimo Compagno trovato.
-function freshKit(seed){const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null};S.viewB=firstOwn();saveS()}
+function freshKit(seed){const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],sb:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null};S.viewB=firstOwn();saveS()}
 // Le Buste di chi guarda: tutte nel Kit individuale, metà nel Kit di squadra.
 const ownCount=(s=S)=>s.team?s.team/2:6;
 const firstOwn=(s=S)=>s.team&&s.seat?s.team/2:0;
@@ -986,29 +1068,29 @@ const myPool=(s=S)=>s.team?s.pool.filter((x,i)=>ownerAt(s,i)===s.seat):s.pool;
 const openedPool=(s=S)=>s.team?s.pool.filter(x=>x.o===s.seat):s.pool;
 // Dai al Compagno: può farlo solo il proprietario, e la carta esce dal suo Mazzo e dal suo Sideboard. false se non è sua.
 function giveCard(u,s=S){const i=s.pool.findIndex(x=>x.u===u);if(!s.team||i<0||ownerAt(s,i)!==s.seat)return false;
-  s.tc={...s.tc,[i]:((s.tc||{})[i]||0)+1};s.deck=s.deck.filter(x=>x!==u);return true}
-// Unisce i contatori del Compagno. Le carte appena ricevute sono nel Sideboard, quelle non più proprie escono dal Mazzo
-// (succede dopo un ricaricamento con uno stato vecchio). got: gli uid ricevuti.
+  s.tc={...s.tc,[i]:((s.tc||{})[i]||0)+1};s.deck=s.deck.filter(x=>x!==u);s.sb=(s.sb||[]).filter(x=>x!==u);return true}
+// Unisce i contatori del Compagno. Le carte appena ricevute sono tra le non messe del Pool, quelle non più proprie escono dal
+// Mazzo e dalle Pile del Sideboard (succede dopo un ricaricamento con uno stato vecchio). got: gli uid ricevuti.
 function mergeTeam(tc,s=S){if(!s.team)return{changed:false,got:[]};const own=()=>new Set(myPool(s).map(x=>x.u));
   const before=own(),was=JSON.stringify(s.tc||{});s.tc=mergeTc(s.tc||{},tc);if(JSON.stringify(s.tc)===was)return{changed:false,got:[]};
-  const after=own();s.deck=s.deck.filter(u=>after.has(u));return{changed:true,got:[...after].filter(u=>!before.has(u))}}
+  const after=own();s.deck=s.deck.filter(u=>after.has(u));s.sb=(s.sb||[]).filter(u=>after.has(u));return{changed:true,got:[...after].filter(u=>!before.has(u))}}
 // Contatori letti da un testo non fidato: solo indici del Pool e interi positivi.
 function cleanTc(tc,n){const out={};if(tc&&typeof tc==='object')for(const i in tc){const k=+i,t=Math.floor(+tc[i]);if(Number.isInteger(k)&&k>=0&&k<n&&t>0&&t<1e6)out[k]=t}return out}
 // Cambia posto, solo durante l'Apertura: le Buste aperte ripartono da una, e dal Mazzo escono le carte del Compagno.
 function setSeat(seat){if(!S.team||S.seat===seat||!inOpening())return;S.seat=seat;S.opened=1;S.viewB=firstOwn();const mine=new Set(myPool().map(x=>x.u));
-  S.deck=S.deck.filter(u=>mine.has(u));S.lay=null;S.saveId=null;saveS()}
+  S.deck=S.deck.filter(u=>mine.has(u));S.sb=[];S.lay=null;S.saveId=null;saveS()}
 if(!S||!S.pool)freshKit(newSeed());
-migrateLay(S);
+migrateLay(S);migrateSb(S);
 let VIEW='open';
 
 // Mazzi salvati: ognuno porta con sé il suo Pool, così resta giocabile anche dopo aver aperto altri kit.
 // Stanno nel localStorage di chi guarda la pagina; con «Esporta» si copiano come testo.
 let SAVES=LS.get('mtg-lab:fra-mazzi-v1',[]);
 const persistSaves=()=>LS.set('mtg-lab:fra-mazzi-v1',SAVES);
-if(SAVES.some(s=>!s.lay)){SAVES.forEach(migrateLay);persistSaves()}
-// La parte di un salvataggio che è il Mazzo: carte, terre base, disposizione delle Pile e, nel Kit di squadra,
-// i passaggi delle carte tra i Compagni. Il Sideboard è il resto del Pool.
-const deckPart=o=>({seat:o.seat||0,deck:[...o.deck],basics:{...o.basics},lay:JSON.parse(JSON.stringify(o.lay||{})),tc:{...o.tc}});
+if(SAVES.some(s=>!s.lay||!Array.isArray(s.sb))){SAVES.forEach(s=>migrateSb(migrateLay(s)));persistSaves()}
+// La parte di un salvataggio che è il Mazzo: carte, carte nelle Pile del Sideboard, terre base, disposizione delle Pile e,
+// nel Kit di squadra, i passaggi delle carte tra i Compagni. Il Sideboard è il resto del Pool.
+const deckPart=o=>({seat:o.seat||0,deck:[...o.deck],sb:[...(o.sb||[])],basics:{...o.basics},lay:JSON.parse(JSON.stringify(o.lay||{})),tc:{...o.tc}});
 const findSave=id=>SAVES.find(s=>s.id===id);
 // Senza nome sovrascrive il Mazzo salvato da cui si è partiti; con un nome ne crea uno nuovo.
 function saveDeck(name){syncLay();let s=!name&&findSave(S.saveId);
@@ -1042,10 +1124,11 @@ function importDeck(code){const m=/^MTGLAB1:([A-Za-z0-9+/=]+)$/.exec(String(code
   const us=new Set(o.pool.map(x=>x.u));const only=a=>(Array.isArray(a)?a:[]).filter(u=>us.has(u));
   const basics={};COLORS.forEach(k=>basics[k]=Math.max(0,Math.min(60,Math.floor(+o.basics?.[k]||0))));
   const s={id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:String(o.name||'Mazzo importato').slice(0,40),ts:Date.now(),
-    seed:String(o.seed||'').slice(0,24),team:[8,12].includes(o.team)?o.team:0,seat:o.seat===1?1:0,boosters:okBoosters(o.boosters),promo:o.promo&&BY[o.promo.c]?o.promo:null,pool:o.pool,deck:only(o.deck),tc:cleanTc(o.tc,o.pool.length),basics,st:{mw:0,ml:0,gw:0,gl:0}};
+    seed:String(o.seed||'').slice(0,24),team:[8,12].includes(o.team)?o.team:0,seat:o.seat===1?1:0,boosters:okBoosters(o.boosters),promo:o.promo&&BY[o.promo.c]?o.promo:null,pool:o.pool,deck:only(o.deck),...(Array.isArray(o.sb)?{sb:only(o.sb)}:{}),tc:cleanTc(o.tc,o.pool.length),basics,st:{mw:0,ml:0,gw:0,gl:0}};
   // Codici di prima delle due zone: il Sideboard scelto e le colonne del Mazzo passano da migrateLay, che controlla i criteri.
   if(o.lay)s.lay=cleanLay(o.lay,us);
   else migrateLay(Object.assign(s,{side:only(o.side),grp:o.grp,cols:Array.isArray(o.cols)?o.cols.map(c=>({k:c?.k??null,u:only(c?.u)})):null}));
+  migrateSb(s);
   SAVES.unshift(s);persistSaves();return s.id}
 
 /* 41-views.js */
@@ -1131,7 +1214,7 @@ function renderOpen(){
   $('#todeck').onclick=()=>goStep('deck');
   const open_=(code,msg)=>{freshKit(code);resetGame();commit();FLIP={b:S.viewB,n:0};S._anim=-1;const tm=timerNewKit();renderOpen();toast(msg+S.seed+(tm?' · timer avviato':''))};
   // Un Kit nuovo apre una Sessione nuova: Pool, Mazzo e Match ripartono da zero, e nel Two-Headed Giant anche il Compagno.
-  // Prima si avvisa, e se il Mazzo non è salvato si propone di salvarlo (niente confirm(), che nell'Artifact è bloccato).
+  // Prima si avvisa, e se il Mazzo non è salvato si propone di salvarlo (con una finestra dell'app, non con confirm()).
   const load=(code,msg)=>{const n=kitLoss(),match=!!G.me||!!G.match.res;if(!n&&!match&&S.opened<=1&&!(S.team&&MATE)){open_(code,msg);return}
     const toTeam=!!kitTeam(code);
     openModal('Kit nuovo: si riparte da zero',m=>{
@@ -1163,8 +1246,9 @@ const COL_GROUPS=['col','cmc','type','rar','cre','none'],ROW_GROUPS=['none','rr'
 const ZONE_NAME={deck:'Mazzo',side:'Sideboard',mate:'Pool del Compagno'};
 const zoneSeg=(name,lbl,attr,opts,val)=>`<span class="zset"><span class="muted">${lbl}</span><span class="seg" role="group" aria-label="${lbl}: ${ZONE_NAME[name]}">${opts.map(([k,l])=>`<button data-zone="${name}" ${attr}="${k}" aria-pressed="${val===k}">${l}</button>`).join('')}</span></span>`;
 // L'ordine si sceglie solo quando ce n'è più d'uno: il GIH WR compare quando arrivano i dati (issue #20).
-function zoneHead(name,title,z=S.lay[name]){const ords=Object.keys(ORDERS).filter(okOrder);
-  return `<div class="zhead"><span class="eyebrow">${title}</span>${zoneSeg(name,'Colonne','data-zc',COL_GROUPS.map(k=>[k,GROUPS[k].l]),z.c)}${zoneSeg(name,'Righe','data-zr',ROW_GROUPS.map(k=>[k,GROUPS[k].l]),z.r)}${ords.length>1?zoneSeg(name,'Ordine','data-zo',ords.map(k=>[k,ORDERS[k].l]),okOrder(z.o)?z.o:'cmc'):''}</div>`}
+// lead: prima del titolo (il bottone che chiude il Sideboard); segs=false toglie le scorciatoie, a zona chiusa.
+function zoneHead(name,title,z=S.lay[name],{lead='',segs=true}={}){const ords=Object.keys(ORDERS).filter(okOrder);
+  return `<div class="zhead">${lead}<span class="eyebrow">${title}</span>${segs?zoneSeg(name,'Colonne','data-zc',COL_GROUPS.map(k=>[k,GROUPS[k].l]),z.c)+zoneSeg(name,'Righe','data-zr',ROW_GROUPS.map(k=>[k,GROUPS[k].l]),z.r)+(ords.length>1?zoneSeg(name,'Ordine','data-zo',ords.map(k=>[k,ORDERS[k].l]),okOrder(z.o)?z.o:'cmc'):''):''}</div>`}
 // Una zona stesa in Pile: le colonne in orizzontale e le righe una sotto l'altra. Se edit, le Pile accettano le carte trascinate
 // e in fondo ci sono una colonna vuota a destra e una riga vuota sotto dove crearne di nuove. el(u): la carta da mostrare.
 function gridEl(name,z,el,edit){const nc=z.ck.length,nr=z.rk.length;
@@ -1184,59 +1268,117 @@ function gridEl(name,z,el,edit){const nc=z.ck.length,nr=z.rk.length;
 function pilesEl(name,click){const byU=poolByU();return gridEl(name,syncLay()[name],u=>byU[u]&&cardEl(byU[u],'',()=>click(byU[u])),true)}
 // Il clic su una carta la manda nell'altra zona, nella Pila delle sue chiavi.
 const pileClick=(name,redraw)=>x=>{placeCard(x.u,name==='deck'?'side':'deck');saveS();redraw()};
-// I contatori delle terre base. Sotto ognuno le fonti di quel colore: quante ne chiede la carta più esigente del Mazzo (sourcesNeeded,
-// tabella di Karsten) e quante ne ha, terre non base comprese. È un dato, non un consiglio. zoom: un clic sul contatore mostra la terra.
-function basicsEl(redraw,zoom){const bs=document.createElement('div');bs.className='basics';const need=sourcesNeeded(S.deck,S.pool),have=landSources(S.deck,S.pool,S.basics);
+// I contatori delle terre base. Sotto ognuno la carta di quel colore più difficile da lanciare al suo turno e con che probabilità (castOdds);
+// nel title le fonti che ha e quelle che chiede la tabella di Karsten (sourcesNeeded). È un dato, non un consiglio. zoom: un clic sul contatore mostra la terra.
+function basicsEl(redraw,zoom){const bs=document.createElement('div');bs.className='basics';const need=sourcesNeeded(S.deck,S.pool),have=landSources(S.deck,S.pool,S.basics),odds=castOdds(S.deck,S.pool,S.basics);
   COLORS.forEach(k=>{const r=document.createElement('div');r.className='bstep';if(zoom)r.dataset.cid=BASIC_ID[k];const n=need[k];
-    const why=n&&`${BY[n.card].n} (${BY[n.card].f[0].m}) chiede ${n.need} fonti di questo colore`+(n.splash?': è uno splash (3 carte o meno con un simbolo), soglia di Drifter':' secondo la tabella di Karsten per 40 carte');
+    const why=n&&`Hai ${have[k]} fonti di questo colore, terre non base comprese; ne servono ${n.need}. `+
+      `${BY[n.card].n} (${BY[n.card].f[0].m}) ne chiede ${n.need}`+(n.splash?': è uno splash (3 carte o meno con un simbolo), soglia di Drifter.':' secondo la tabella di Karsten per 40 carte.');
+    const o=odds[k];
     r.innerHTML=`<button aria-label="Meno ${BASIC_NAME[k]}">−</button><span><span class="ms ${k}"></span> <b class="mono">${S.basics[k]}</b></span><button aria-label="Più ${BASIC_NAME[k]}">+</button>`+
-      (n?`<span class="bsrc${have[k]<n.need?' short':''}" title="${esc(why)}"><span>fonti: servono ${n.need}</span> <span>/ hai ${have[k]}</span></span>`:'');
+      (o?`<span class="bsrc${o.odds<.85?' short':''}" title="${esc(why||'')}"><span><b>${Math.round(o.odds*100)}%</b> al turno ${o.turn}</span><span class="bcard">${esc(BY[o.card].n)}</span></span>`:'');
     const [m,,p]=r.children;m.onclick=()=>{S.basics[k]=Math.max(0,S.basics[k]-1);saveS();redraw()};p.onclick=()=>{S.basics[k]++;saveS();redraw()};bs.appendChild(r)});
   return bs}
 // Chi ridisegna dopo un trascinamento tra le Pile: la scheda Mazzo o la finestra tra le Partite.
 let ZREDRAW=()=>renderDeck();
+// Costruttore del Mazzo (ADR 0005): a sinistra le Pile del Mazzo e sotto quelle del Sideboard, che si chiudono; a destra la colonna
+// del Pool, in lista o a griglia. Lo usano la scheda Mazzo e la finestra tra le Partite. BLD: preferenze di chi guarda, non del
+// Mazzo (vista della colonna, Sideboard aperto, filtri per colore, solo non messe). POOL_OPEN: il pannello su schermo stretto.
+const PV=['list','grid'],PCOLS=[...COLORS,'C'];
+let BLD=(o=>({view:PV.includes(o?.view)?o.view:'list',sbOpen:o?.sbOpen!==false,only:o?.only===true,cols:Array.isArray(o?.cols)?PCOLS.filter(k=>o.cols.includes(k)):[]}))(LS.get('mtg-lab:costruttore-v1',null));
+const saveBld=()=>LS.set('mtg-lab:costruttore-v1',BLD);
+let POOL_OPEN=false,BROOT=document;
+// extra: sotto le Pile, nella scheda Mazzo il Pool del Compagno.
+function builderHTML(extra=''){const st=deckStats(),nIn=zoneUids(S,'side').length,nAll=sideboard().length,open=BLD.sbOpen;
+  const tog=`<button class="sbtog" aria-expanded="${open}" title="${open?'Chiudi':'Apri'} le Pile del Sideboard">${open?'▾':'▸'}</button>`;
+  return `<div class="bld"><div class="bmain">
+  <section class="zsec">${zoneHead('deck',`Mazzo · ${S.deck.length} carte e ${st.basics} terre base · clic → Sideboard`)}<div class="zwrap" data-zw="deck"></div></section>
+  <section class="zsec">${zoneHead('side',`Sideboard · ${nIn} nelle Pile, ${nAll} in tutto${S.team?` (le tue, ${seatName(S.seat)})`:''}${open?' · clic → Mazzo':''}`,S.lay.side,{lead:tog,segs:open})}
+  ${open?`<div class="zwrap" data-zw="side"></div>${nIn?'<div class="row"><button class="btn sm" data-sbclear>Rimetti tutte nel Pool</button></div>':''}`:''}
+  <p class="muted zhint">Trascina le carte dalla colonna del Pool alle Pile, tra le Pile o tra Mazzo e Sideboard; per togliere una carta trascinala sulla colonna. Le carte che non metti nelle Pile sono comunque Sideboard. Le scorciatoie ridispongono la zona da capo.</p></section>
+  ${extra}</div>
+  <aside class="bpool${POOL_OPEN?' open':''}" data-dz="pool" aria-label="Pool">${poolHeadHTML()}<div class="pbody"></div></aside></div>`}
+function poolHeadHTML(){const n=myPool().length,nd=zoneUids(S,'deck').length,ns=zoneUids(S,'side').length;
+  const cl={W:'Bianco',U:'Blu',B:'Nero',R:'Rosso',G:'Verde',C:'Incolore e terre'};
+  return `<button class="phandle" aria-expanded="${POOL_OPEN}"><span>Pool · ${n} carte</span><span class="mono">M ${nd} · S ${ns}</span><span>${POOL_OPEN?'▾':'▴'}</span></button>
+  <div class="phead"><span class="eyebrow">Pool · ${n} carte${S.team?' tue':''}</span><span class="pcount mono" title="Nel Mazzo · nelle Pile del Sideboard">M ${nd} · S ${ns}</span>
+  <span class="seg" role="group" aria-label="Vista del Pool">${[['list','Lista'],['grid','Griglia']].map(([k,l])=>`<button data-pv="${k}" aria-pressed="${BLD.view===k}">${l}</button>`).join('')}</span></div>
+  <div class="pfilt"><span class="seg" role="group" aria-label="Filtra per colore">${PCOLS.map(k=>`<button data-pc="${k}" aria-pressed="${BLD.cols.includes(k)}" title="${cl[k]}" aria-label="${cl[k]}"><span class="ms ${k==='C'?'':k}">${k==='C'?'◇':''}</span></button>`).join('')}</span>
+  <label class="ponly"><input type="checkbox" data-po${BLD.only?' checked':''}> solo non messe</label></div>
+  ${pairsHTML()}`}
+// Le carte della colonna, per colore e poi per costo, con i filtri. mark: 'm' nel Mazzo, 's' nelle Pile del Sideboard.
+function poolBody(body,redraw){const inD=new Set(zoneUids(S,'deck')),inS=new Set(zoneUids(S,'side')),keys=GROUPS.col.keys;
+  const mark=u=>inD.has(u)?'m':inS.has(u)?'s':'';
+  const shown=x=>{if(BLD.only&&mark(x.u))return false;if(!BLD.cols.length)return true;const k=BY[x.c].c||'';return BLD.cols.some(c=>c==='C'?!k:k.includes(c))};
+  const cards=myPool().filter(shown).sort((a,b)=>keys.indexOf(groupKey('col',a.c))-keys.indexOf(groupKey('col',b.c))||byCost(a,b));
+  const groups=keys.map(k=>[k,cards.filter(x=>groupKey('col',x.c)===k)]).filter(([,a])=>a.length);
+  const click=x=>()=>{placeCard(x.u,inD.has(x.u)?'side':'deck');saveS();redraw()};
+  const tag=(w,m)=>{if(!m)return;const t=document.createElement('span');t.className='mtag'+(m==='s'?' sb':'');t.textContent=m.toUpperCase();w.appendChild(t)};
+  body.replaceChildren();
+  if(!cards.length){body.innerHTML=`<p class="muted zhint">${myPool().length?'Nessuna carta con questi filtri.':'Nessuna carta nel Pool.'}</p>`;return}
+  if(BLD.view==='grid'){const g=document.createElement('div');g.className='pgrid';
+    groups.forEach(([k,a])=>{const c=document.createElement('div');c.className='col pcol';c.innerHTML=`<h4><span>${esc(GROUPS.col.t[k])}</span><span>${a.length}</span></h4>`;
+      const st=document.createElement('div');st.className='stack';a.forEach(x=>{const m=mark(x.u),w=cardEl(x,m?'in-'+m:'',click(x));tag(w,m);st.appendChild(w)});c.appendChild(st);g.appendChild(c)});
+    body.appendChild(g);return}
+  groups.forEach(([k,a])=>{const h=document.createElement('div');h.className='pgh';h.innerHTML=`<span>${esc(GROUPS.col.t[k])}</span><span>${a.length}</span>`;body.appendChild(h);
+    a.forEach(x=>{const m=mark(x.u),c=BY[x.c],r=document.createElement('div');r.className='prow'+(m?' '+m:'');r.dataset.u=x.u;setPreviewAttrs(r,x);
+      const wr=WR&&WR[x.c]!=null?`<span class="pwr${WRN[x.c]<WR_MIN?' low':''}">${fmtWR(WR[x.c])}</span>`:'<span></span>';
+      r.innerHTML=`<span class="pcost">${mana(c.f[0].m||'')}</span><span class="pn">${esc(c.n)}${x.f?' <span class="pfoil" title="Foil">✦</span>':''}</span>${wr}<span class="pmk">${m.toUpperCase()}</span>`;
+      r.onclick=click(x);
+      // Con il mouse, passandoci sopra si vede la carta, a sinistra della colonna; col dito, o se a sinistra non c'è posto
+      // (il pannello del telefono), l'anteprima coprirebbe la riga e resta il tasto destro.
+      r.onpointerenter=e=>{if(e.pointerType==='mouse'&&!deckDrag&&r.getBoundingClientRect().left>=270)showZoom(x,r,{width:250})};r.onpointerleave=()=>{if(zoomedOn(r))closeZoom()};
+      body.appendChild(r)})})}
+// Monta il costruttore scritto da builderHTML dentro root. redraw: ridisegna chi lo ospita.
+function mountBuilder(root,redraw){const st=deckStats(),q=s=>root.querySelector(s);BROOT=root;
+  const zd=q('[data-zw=deck]');zd.appendChild(pilesEl('deck',pileClick('deck',redraw)));
+  const basicCol=document.createElement('div');basicCol.className='col basicsbox';basicCol.innerHTML=`<h4><span>Terre base</span><span>${st.basics}</span></h4>`;
+  basicCol.appendChild(basicsEl(redraw,true));zd.appendChild(basicCol);
+  q('[data-zw=side]')?.appendChild(pilesEl('side',pileClick('side',redraw)));
+  [['zc','c'],['zr','r'],['zo','o']].forEach(([a,f])=>root.querySelectorAll(`.bmain [data-${a}]`).forEach(b=>b.onclick=()=>{const n=b.dataset.zone;(n==='mate'?mateSet():S.lay[n])[f]=b.dataset[a];if(n!=='mate')resetZone(n);saveS();redraw()}));
+  q('.sbtog').onclick=()=>{BLD.sbOpen=!BLD.sbOpen;saveBld();redraw()};
+  const clr=q('[data-sbclear]');if(clr)clr.onclick=()=>{S.sb=[];syncLay();saveS();redraw()};
+  const pool=q('.bpool');poolBody(q('.pbody'),redraw);
+  q('.phandle').onclick=()=>{POOL_OPEN=!POOL_OPEN;redraw()};
+  pool.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{BLD.view=b.dataset.pv;saveBld();redraw()});
+  pool.querySelectorAll('[data-pc]').forEach(b=>b.onclick=()=>{const k=b.dataset.pc;BLD.cols=BLD.cols.includes(k)?BLD.cols.filter(c=>c!==k):PCOLS.filter(c=>c===k||BLD.cols.includes(c));saveBld();redraw()});
+  q('[data-po]').onchange=e=>{BLD.only=e.target.checked;saveBld();redraw()};
+  const pd=q('.pairs');pd.ontoggle=()=>PAIRS_OPEN=pd.open;
+  pd.querySelectorAll('tr[data-pair]').forEach(r=>r.onclick=()=>{PAIR_HI=PAIR_HI===r.dataset.pair?null:r.dataset.pair;markPair()});markPair()}
 function renderDeck(){
-  syncMate();syncLay();ZREDRAW=renderDeck;const el=$('#v-deck');const st=deckStats();const cur=findSave(S.saveId);const nSide=zoneUids(S,'side').length;
+  syncMate();syncLay();ZREDRAW=renderDeck;const el=$('#v-deck');const st=deckStats();const cur=findSave(S.saveId);
   const curve=[0,0,0,0,0,0,0];st.cards.filter(x=>!isLand(x.c)).forEach(x=>curve[Math.min(6,Math.max(0,Math.floor(cmc(x.c))))]++);const cm=Math.max(1,...curve);
   el.innerHTML=`<div class="dtool"><div><div class="eyebrow">Mazzo</div><div class="count ${st.total>=40?'ok':''}">${st.total}<small> / 40</small></div></div>
   <div class="stats"><span>Creature <b class="mono">${st.cre}</b></span><span>Altre magie <b class="mono">${st.cards.length-st.cre-st.cards.filter(x=>isLand(x.c)).length}</b></span><span>Terre <b class="mono">${st.lands}</b></span></div>
   <div class="curve" title="Curva di mana">${curve.map((n,i)=>`<div style="height:${n/cm*100}%"><span>${i===6?'6+':i}</span></div>`).join('')}</div>
-  <div class="row" style="margin-left:auto"><span class="savedas" title="Il Mazzo salvato da cui stai lavorando">${cur?`${esc(cur.name)}${deckDirty()?' · <b>modificato</b>':' · salvato'}`:'Non salvato'}</span><button class="btn" id="save">${cur?'Salva':'Salva…'}</button><button class="btn" id="saves">Mazzi salvati${SAVES.length?` (${SAVES.length})`:''}</button><button class="btn" id="auto">Auto-costruisci</button><button class="btn" id="lands">Suggerisci terre</button><button class="btn" id="copy">Copia lista (Arena)</button><button class="btn" id="forge">Esporta per Forge</button><button class="btn" id="clear">Svuota</button><button class="btn pri" id="play">Gioca →</button></div>${gihSource()}</div>
-  <section class="zsec">${zoneHead('deck',`Mazzo · ${S.deck.length} carte e ${st.basics} terre base · clic → Sideboard`)}<div class="zwrap" id="zdeck"></div></section>
-  <section class="zsec">${pairsHTML()}${zoneHead('side',`Sideboard · ${nSide} carte${S.team?` (le tue, ${seatName(S.seat)})`:''} · clic → Mazzo`)}<div class="zwrap" id="zside"></div>
-  <p class="muted zhint">Trascina le carte tra le Pile, in una colonna o una riga nuova, o tra Mazzo e Sideboard. Le scorciatoie ridispongono la zona da capo.</p></section>
-  ${S.team?mateHead():''}`;
-  $('#zdeck').appendChild(pilesEl('deck',pileClick('deck',renderDeck)));$('#zside').appendChild(pilesEl('side',pileClick('side',renderDeck)));
-  const basicCol=document.createElement('div');basicCol.className='col basicsbox';basicCol.innerHTML=`<h4><span>Terre base</span><span>${st.basics}</span></h4>`;
-  basicCol.appendChild(basicsEl(renderDeck,true));$('#zdeck').appendChild(basicCol);
-  [['zc','c'],['zr','r'],['zo','o']].forEach(([a,f])=>el.querySelectorAll(`[data-${a}]`).forEach(b=>b.onclick=()=>{const n=b.dataset.zone;(n==='mate'?mateSet():S.lay[n])[f]=b.dataset[a];if(n!=='mate')resetZone(n);saveS();renderDeck()}));
+  <div class="row" style="margin-left:auto"><span class="savedas" title="Il Mazzo salvato da cui stai lavorando">${cur?`${esc(cur.name)}${deckDirty()?' · <b>modificato</b>':' · salvato'}`:'Non salvato'}</span><button class="btn" id="save">${cur?'Salva':'Salva…'}</button><button class="btn" id="saves">Mazzi salvati${SAVES.length?` (${SAVES.length})`:''}</button><button class="btn" id="auto">Auto-costruisci</button><button class="btn" id="lands">Suggerisci terre</button><button class="btn" id="copy">Copia lista (Arena)</button><button class="btn" id="forge">Esporta per Forge</button><button class="btn" id="clear" title="Rimette le carte del Mazzo nel Pool e azzera le terre base">Svuota</button><button class="btn pri" id="play">Gioca →</button></div>${gihSource()}</div>
+  ${builderHTML(S.team?mateHead():'')}`;
+  mountBuilder(el,renderDeck);
   $('#save').onclick=()=>{if(!cur){savesModal();return}saveDeck();renderDeck();toast('Salvato: '+cur.name)};
   $('#saves').onclick=savesModal;
-  $('#auto').onclick=()=>{const r=autoBuild(myPool(),GIH_?.w);S.deck=r.uids;resetZone('deck');S.basics=r.basics;saveS();renderDeck();toast('Mazzo '+r.pair+' costruito: rivedilo tu!')};
+  $('#auto').onclick=()=>{const r=autoBuild(myPool(),GIH_?.w);S.deck=r.uids;S.sb=(S.sb||[]).filter(u=>!r.uids.includes(u));resetZone('deck');S.basics=r.basics;saveS();renderDeck();toast('Mazzo '+r.pair+' costruito: rivedilo tu!')};
   $('#lands').onclick=()=>{const nl=S.deck.filter(u=>!isLand(poolByU()[u].c)).length;const ln=S.deck.length-nl;S.basics=suggestBasics(S.deck,myPool(),Math.max(0,40-nl-ln));saveS();renderDeck()};
   $('#clear').onclick=()=>{S.deck=[];resetZone('deck');S.basics={W:0,U:0,B:0,R:0,G:0};saveS();renderDeck()};
   $('#copy').onclick=()=>{const t=deckText();const done=()=>toast('Lista copiata');try{navigator.clipboard.writeText(t).then(done,()=>showText(t))}catch(e){showText(t)}};
   $('#forge').onclick=forgeModal;
   $('#play').onclick=()=>go('table');
-  const pd=$('#pairs');pd.ontoggle=()=>PAIRS_OPEN=pd.open;
-  pd.querySelectorAll('tr[data-pair]').forEach(r=>r.onclick=()=>{PAIR_HI=PAIR_HI===r.dataset.pair?null:r.dataset.pair;markPair()});markPair();
   if(S.team)renderMate();
   publish();
 }
-// Tabella delle coppie sopra il Sideboard (issue #25): solo numeri, sulle proprie carte, nell'ordine fisso di PAIRS.
+// Tabella delle coppie in cima alla colonna del Pool (issue #25): solo numeri, sulle proprie carte, nell'ordine fisso di PAIRS.
 // Il GIH WR compare quando ci sono i dati (issue #20). Aperta o chiusa e coppia evidenziata non si salvano.
 let PAIRS_OPEN=false,PAIR_HI=null;
 const pairSum=()=>PAIR_HI?'evidenziata: '+PAIRS.find(p=>p.k===PAIR_HI).n:'giocabili, creature e curva per coppia';
 function pairsHTML(){const wr=!!WR,num=(n,cv)=>`<td class="${cv?'cv':''}${n?'':' z'}">${n}</td>`,pip=k=>[...k].map(c=>`<span class="ms ${c}"></span>`).join('');
-  return `<details class="pairs" id="pairs"${PAIRS_OPEN?' open':''}><summary><span class="eyebrow">Coppie di colori</span> <span class="muted" id="pairsum">${pairSum()}</span></summary>
+  return `<details class="pairs"${PAIRS_OPEN?' open':''}><summary><span class="eyebrow">Coppie di colori</span> <span class="muted psum">${pairSum()}</span></summary>
   <div class="ptwrap"><table class="ptab"><thead><tr><th rowspan="2" scope="col">Coppia</th><th rowspan="2" scope="col">Giocabili</th><th rowspan="2" scope="col">Creature</th><th rowspan="2" scope="col">Multicolori</th><th colspan="6" scope="colgroup" class="cvh">Curva</th>${wr?'<th rowspan="2" scope="col">GIH WR medio<br>23 migliori</th>':''}</tr>
   <tr>${['1','2','3','4','5','6+'].map(c=>`<th scope="col" class="cv">${c}</th>`).join('')}</tr></thead>
   <tbody>${pairTable(myPool(),WR).map(r=>`<tr data-pair="${r.k}"><th scope="row"><button class="pbtn" aria-pressed="false">${pip(r.k)}<span>${esc(r.n)}</span></button></th>${num(r.play)}${num(r.cre)}${num(r.multi)}${r.curve.map(n=>num(n,1)).join('')}${wr?`<td>${r.wr==null?'—':r.wr.toFixed(1).replace('.',',')+'%'}</td>`:''}</tr>`).join('')}</tbody></table></div>
-  <p class="muted zhint">Le carte ${S.team?'tue ':''}del Pool, senza terre, che si lanciano con i due colori (un ibrido basta che ne abbia uno). Clic su una riga: nelle Pile si attenuano le carte fuori dalla coppia; un altro clic toglie l'evidenza.</p></details>`}
-// Attenua nelle Pile del Mazzo e del Sideboard le carte fuori dalla coppia evidenziata, e segna la sua riga.
-function markPair(){document.querySelectorAll('#zdeck .card[data-u],#zside .card[data-u]').forEach(c=>c.classList.toggle('dim',!!PAIR_HI&&!inPair(c.dataset.cid,PAIR_HI)));
-  document.querySelectorAll('#pairs tr[data-pair]').forEach(r=>{const on=r.dataset.pair===PAIR_HI;r.classList.toggle('on',on);r.querySelector('.pbtn').setAttribute('aria-pressed',on)});
-  $('#pairsum').textContent=pairSum()}
+  <p class="muted zhint">Le carte ${S.team?'tue ':''}del Pool, senza terre, che si lanciano con i due colori (un ibrido basta che ne abbia uno). Clic su una riga: nelle Pile e nel Pool si attenuano le carte fuori dalla coppia; un altro clic toglie l'evidenza.</p></details>`}
+// Attenua nelle Pile e nella colonna del Pool le carte fuori dalla coppia evidenziata, e segna la sua riga.
+function markPair(){const r=BROOT;r.querySelectorAll('.bld [data-u]').forEach(c=>c.classList.toggle('dim',!!PAIR_HI&&!inPair(c.dataset.cid,PAIR_HI)));
+  r.querySelectorAll('.pairs tr[data-pair]').forEach(t=>{const on=t.dataset.pair===PAIR_HI;t.classList.toggle('on',on);t.querySelector('.pbtn').setAttribute('aria-pressed',on)});
+  const n=r.querySelector('.psum');if(n)n.textContent=pairSum()}
 // Pool del Compagno, in sola lettura: le sue carte (secondo i passaggi noti) nelle stesse Pile, segnate «Mazzo» se sono nel Mazzo
 // che pubblica nella presence. Le carte non hanno data-u, quindi non si trascinano né si cliccano; ci si trascinano sopra le proprie.
 // Le Pile si ridispongono a ogni disegno con le impostazioni di chi guarda (mlay), che non fanno parte del Mazzo salvato.
@@ -1256,17 +1398,19 @@ function renderMate(){const g=$('#mgrid'),inDeck=mateDeckSet(),byU=poolByU();
 function giveToMate(u){const x=poolByU()[u];if(!x||!giveCard(u)){toast('Non è una tua carta: può dartela solo il Compagno');return}
   syncLay();saveS();closeZoom();renderDeck();toast(`Data al Compagno: ${BY[x.c].n}`+(MATE?'':'. La riceverà appena si collega'))}
 // Trascinamento delle carte tra le Pile, nella scheda Mazzo e nella finestra tra le Partite: in un'altra Pila, in una colonna
-// nuova, nell'altra zona o, nel Kit di squadra, sul Pool del Compagno. Senza movimento resta un clic e valgono i clic delle carte.
+// nuova, nell'altra zona, dalla colonna del Pool o sulla colonna (torna tra le non messe) o, nel Kit di squadra, sul Pool del Compagno. Senza movimento resta un clic e valgono i clic delle carte.
 // Col dito si trascina dopo una pressione lunga (HOLD_MS): un movimento prima è uno scorrimento della pagina.
 const HOLD_MS=300;
 let deckDrag=null,deckDropped=false;
 const deckDrop=(e,root)=>{for(const x of document.elementsFromPoint(e.clientX,e.clientY)){const d=x.closest('[data-zpile],[data-dz]');if(d&&root.contains(d))return d}return null};
-document.addEventListener('pointerdown',e=>{if(e.button!==0)return;const el=e.target.closest('.zgrid .card[data-u]');if(!el)return;
-  const d=deckDrag={el,u:el.dataset.u,root:el.closest('#v-deck,#modal')||document.body,sx:e.clientX,sy:e.clientY,moved:false,armed:e.pointerType!=='touch'};
+document.addEventListener('pointerdown',e=>{if(e.button!==0)return;const el=e.target.closest('.zgrid .card[data-u],.bpool [data-u]');if(!el)return;
+  const d=deckDrag={el,u:el.dataset.u,root:el.closest('#v-deck,#modal')||document.body,pool:!!el.closest('.bpool'),sx:e.clientX,sy:e.clientY,moved:false,armed:e.pointerType!=='touch'};
   if(!d.armed)d.hold=setTimeout(()=>{if(deckDrag===d&&!d.moved){d.armed=true;el.classList.add('held')}},HOLD_MS)});
 document.addEventListener('pointermove',e=>{if(!deckDrag)return;const d=deckDrag;
   if(!d.moved&&Math.hypot(e.clientX-d.sx,e.clientY-d.sy)>6){if(!d.armed){clearTimeout(d.hold);deckDrag=null;return}
-    d.moved=true;d.width=d.el.getBoundingClientRect().width;d.ghost=d.el.querySelector('.face').cloneNode(true);d.ghost.className+=' ghost';d.ghost.style.width=d.width+'px';document.body.appendChild(d.ghost);
+    // Una riga della lista non ha la faccia della carta: il fantasma la disegna.
+    const f=d.el.querySelector('.face');d.moved=true;d.width=f?d.el.getBoundingClientRect().width:90*cardScale();
+    d.ghost=f?f.cloneNode(true):faceEl(poolByU()[d.u]);d.ghost.className+=' ghost';d.ghost.style.width=d.width+'px';document.body.appendChild(d.ghost);
     d.el.classList.add('drag-src');d.root.classList.add('zdrag');closeZoom()}
   if(!d.moved)return;d.ghost.style.left=(e.clientX-d.width/2)+'px';d.ghost.style.top=(e.clientY-20)+'px';
   const t=deckDrop(e,d.root);d.root.querySelectorAll('.drop-hot').forEach(x=>x!==t&&x.classList.remove('drop-hot'));t&&t.classList.add('drop-hot')});
@@ -1275,9 +1419,12 @@ document.addEventListener('touchmove',e=>{if(deckDrag?.armed)e.preventDefault()}
 document.addEventListener('contextmenu',e=>{if(deckDrag?.armed)e.preventDefault()});
 document.addEventListener('pointerup',e=>{if(!deckDrag)return;const d=deckDrag;deckDrag=null;clearTimeout(d.hold);d.el.classList.remove('held');if(!d.moved)return;
   d.ghost.remove();d.root.classList.remove('zdrag');deckDropped=true;setTimeout(()=>deckDropped=false);const t=deckDrop(e,d.root);
-  if(t?.dataset.zpile!=null){const others=[...t.querySelectorAll('.card')].filter(c=>c!==d.el);
+  // In una zona vuota la carta va nella Pila delle sue chiavi, invece che in una colonna fatta a mano.
+  if(t?.dataset.zpile!=null&&!S.lay[t.dataset.zone].ck.length)placeCard(d.u,t.dataset.zone);
+  else if(t?.dataset.zpile!=null){const others=[...t.querySelectorAll('.card')].filter(c=>c!==d.el);
     placeCard(d.u,t.dataset.zone,+t.dataset.col,+t.dataset.row,others.filter(c=>c.getBoundingClientRect().top+8<e.clientY).length)}
   else if(t?.dataset.dz==='mate'){giveToMate(d.u);return}
+  else if(t?.dataset.dz==='pool'&&!d.pool)placeCard(d.u,'pool');
   saveS();ZREDRAW()});
 document.addEventListener('pointercancel',()=>{if(deckDrag){const d=deckDrag;deckDrag=null;clearTimeout(d.hold);d.ghost&&d.ghost.remove();d.root.classList.remove('zdrag');ZREDRAW()}});
 // Il clic che segue un trascinamento non deve anche spostare la carta.
@@ -1285,7 +1432,9 @@ document.addEventListener('click',e=>{if(deckDropped){deckDropped=false;e.stopPr
 // Carte del mazzo come {c, v}: c per le regole, v per l'immagine della variante.
 function deckList(){const byU=poolByU();const out=S.deck.map(u=>byU[u]).filter(Boolean).map(x=>x.v?{c:x.c,v:x.v}:{c:x.c});COLORS.forEach(k=>{for(let i=0;i<S.basics[k];i++)out.push({c:BASIC_ID[k]})});return out}
 function deckText(){const lines=cs=>{const m={};cs.forEach(({c})=>{const n=BY[c].n.split(' // ')[0];const key=BY[c].sg?`${n} (SPG) ${c.slice(1)}`:`${n} (FRA) ${c}`;m[key]=(m[key]||0)+1});return Object.entries(m).map(([k,v])=>v+' '+k).join('\n')};
-  syncLay();const byU=poolByU();const side=pileOrder('side').map(u=>byU[u]).filter(Boolean);return 'Deck\n'+lines(deckList())+(side.length?'\n\nSideboard\n'+lines(side):'')}
+  const side=sideList();return 'Deck\n'+lines(deckList())+(side.length?'\n\nSideboard\n'+lines(side):'')}
+// Il Sideboard delle regole, per le liste: prima le carte nelle Pile, nel loro ordine, poi le non messe nell'ordine del Pool.
+function sideList(){syncLay();const byU=poolByU(),inP=pileOrder('side'),set=new Set(inP);return [...inP,...sideboard().filter(u=>!set.has(u))].map(u=>byU[u]).filter(Boolean)}
 // Colori del Mazzo (dalle carte non terra), per riconoscere i salvataggi a colpo d'occhio.
 function deckColors(pool,deck){const byU=byUid(pool);const k=new Set();deck.forEach(u=>{const x=byU[u];if(x&&!isLand(x.c))[...BY[x.c].c].forEach(c=>k.add(c))});return COLORS.filter(c=>k.has(c))}
 function savesModal(){let armed=null;
@@ -1297,7 +1446,7 @@ function savesModal(){let armed=null;
     const L=$('#svlist');if(!SAVES.length)L.innerHTML='<div class="nog" style="margin:0">Nessun Mazzo salvato.</div>';
     SAVES.forEach(s=>{const r=document.createElement('div');r.className='saverow'+(s.id===S.saveId?' cur':'');const nb=COLORS.reduce((a,k)=>a+(s.basics[k]||0),0);const st=s.st;
       r.innerHTML=`<div class="sv1"><b>${esc(s.name)}</b> ${deckColors(s.pool,s.deck).map(k=>`<span class="ms ${k}"></span>`).join('')}${s.id===S.saveId?' <span class="chip on">in uso</span>':''}</div>
-        <div class="sv2 muted">${s.deck.length+nb} carte · Sideboard ${zoneUids(s,'side').length} · kit ${esc(s.seed)}${s.team?' · '+seatName(s.seat||0):''} · ${new Date(s.ts).toLocaleString('it-IT',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}${st.mw+st.ml?` · Match ${st.mw}-${st.ml} (Partite ${st.gw}-${st.gl})`:''}</div>
+        <div class="sv2 muted">${s.deck.length+nb} carte · Sideboard ${sideboard(s).length} · kit ${esc(s.seed)}${s.team?' · '+seatName(s.seat||0):''} · ${new Date(s.ts).toLocaleString('it-IT',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}${st.mw+st.ml?` · Match ${st.mw}-${st.ml} (Partite ${st.gw}-${st.gl})`:''}</div>
         <div class="row"></div>`;
       const acts=r.querySelector('.row');const B=(l,f,cls='')=>{const b=document.createElement('button');b.className='btn sm '+cls;b.textContent=l;b.onclick=f;acts.appendChild(b)};
       const loadKey='load'+s.id,delKey='del'+s.id;
@@ -1310,23 +1459,21 @@ function savesModal(){let armed=null;
     $('#svimp').onclick=()=>{try{importDeck($('#svcode').value);toast('Mazzo importato');draw_()}catch(e){toast('Codice non valido')}}};
   draw_()},()=>{if(VIEW==='deck')renderDeck()})}
 // Il Mazzo per Forge: file .dck da scaricare, o il testo da copiare.
-// Nell'Artifact il file passa dalla capability downloads, che non accetta l'estensione .dck: si salva un .txt da rinominare.
-let dlCap;const downloadsCap=()=>dlCap??=(async()=>{try{return window.claude&&await window.claude.use('downloads')||null}catch(e){return null}})();
-async function forgeModal(){syncLay();const byU=poolByU();const cur=findSave(S.saveId);
+function forgeModal(){const cur=findSave(S.saveId);
   const name=cur?cur.name:(deckColors(S.pool,S.deck).join('')+' '+S.seed).trim();const base=name.replace(/[\\/:*?"<>|]+/g,' ').trim()||'Mazzo';
-  const t=forgeDck(name,deckList(),pileOrder('side').map(u=>byU[u]).filter(Boolean));const dl=await downloadsCap();
+  const t=forgeDck(name,deckList(),sideList());
   openModal('Esporta per Forge',m=>{m.innerHTML=`<p class="muted" style="margin-top:0;font-size:12.5px">Mazzo e Sideboard nel formato di Forge. Reality Fracture c'è solo nelle <b>daily snapshot</b> di Forge, non ancora nella versione stabile; le carte che Forge non ha ancora vengono saltate.</p>
-    <ol class="muted" style="font-size:12.5px;padding-left:18px">${dl?`<li>Scarica il file: arriva come <code>${esc(base)}.txt</code>. Rinominalo in <code>${esc(base)}.dck</code> (in Esplora file attiva Visualizza → Estensioni nomi file, altrimenti diventa <code>.dck.txt</code>).</li><li>Mettilo in`:'<li>Salva il file in'} <code>%APPDATA%\\Forge\\decks\\constructed</code> (su Windows).</li><li>In Forge, nelle Preferenze, disattiva <b>Conformità del mazzo</b> (Deck Conformance): altrimenti vuole almeno 60 carte.</li><li>Scegli il Mazzo in una partita Constructed, contro l'IA o in rete.</li></ol>
-    <div class="row"><button class="btn pri" id="fgdl">${dl?'Scarica il file (.txt)':'Scarica il file .dck'}</button><button class="btn" id="fgcp">Copia il testo</button></div>
+    <ol class="muted" style="font-size:12.5px;padding-left:18px"><li>Salva il file in <code>%APPDATA%\\Forge\\decks\\constructed</code> (su Windows).</li><li>In Forge, nelle Preferenze, disattiva <b>Conformità del mazzo</b> (Deck Conformance): altrimenti vuole almeno 60 carte.</li><li>Scegli il Mazzo in una partita Constructed, contro l'IA o in rete.</li></ol>
+    <div class="row"><button class="btn pri" id="fgdl">Scarica il file .dck</button><button class="btn" id="fgcp">Copia il testo</button></div>
     <textarea readonly style="width:100%;min-height:220px;margin-top:10px;background:var(--felt2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px;font:12px var(--mono)">${esc(t)}</textarea>`;
-    $('#fgdl').onclick=()=>{if(dl){dl.save({filename:base+'.txt',data:t}).then(()=>toast(`Salvato: rinominalo in ${base}.dck`),e=>{if(e?.code!=='declined')toast('Download non riuscito: usa «Copia il testo»')});return}
-      const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain'}));
+    $('#fgdl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain'}));
       a.download=base+'.dck';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
     $('#fgcp').onclick=()=>{const ta=m.querySelector('textarea');try{navigator.clipboard.writeText(t).then(()=>toast('Testo copiato'),()=>ta.select())}catch(e){ta.select()}}})}
 function showText(t){openModal('Lista del Mazzo',m=>{m.innerHTML=`<textarea readonly style="width:100%;min-height:300px;background:var(--felt2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px;font:12px var(--mono)">${esc(t)}</textarea>`;m.querySelector('textarea').select()})}
 
 /* 42-overlays.js */
-function openModal(title,fill,onClose){$('#mtitle').textContent=title;const b=$('#mbody');b.innerHTML='';fill(b);$('#modal').hidden=false;openModal._c=onClose}
+// La finestra si allarga (classe wide) quando ospita il costruttore del Mazzo.
+function openModal(title,fill,onClose){$('#mtitle').textContent=title;$('#modal .mbox').classList.remove('wide');const b=$('#mbody');b.innerHTML='';fill(b);$('#modal').hidden=false;openModal._c=onClose}
 function closeModal(){if($('#modal').hidden)return;$('#modal').hidden=true;const c=openModal._c;openModal._c=null;c&&c()}
 $('#mclose').onclick=closeModal;$('#modal').addEventListener('pointerdown',e=>{if(e.target.id==='modal')closeModal()});
 function openMenu(x,y,items){const m=$('#ctx');m.innerHTML='';items.forEach(it=>{if(it==='-'){m.appendChild(document.createElement('hr'));return}const b=document.createElement('button');b.innerHTML=`<span>${it[0]}</span>${it[2]?`<kbd>${it[2]}</kbd>`:''}`;b.onclick=()=>{closeMenu();it[1]()};m.appendChild(b)});
@@ -1337,7 +1484,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeMenu();closeMo
 
 /* 43-timer.js */
 // Timer di costruzione del Mazzo, come al prerelease: 30 minuti di costruzione più 15 (MTR App. B), quindi 45;
-// 30 al sealed normale. È di chi guarda la pagina: sta nel localStorage, non nella room.
+// 30 al sealed normale. È di chi guarda la pagina: sta nel localStorage, non nella Stanza.
 // Si salva l'ora di partenza e non i secondi rimasti, così il timer continua anche dopo un ricaricamento.
 // t: dur (ms), acc (ms trascorsi prima della corsa attuale), at (ora di partenza della corsa attuale, null se fermo),
 // warned (soglie già annunciate), auto (riparte da solo quando si apre un Kit nuovo).
@@ -1562,7 +1709,7 @@ let ROOM=null,OPP=null,oppPeer=null,roomPeers=[];
 // nei permanenti si omettono i campi finali a zero. Così un Tavolo pieno sta intero in circa 2 KB.
 const vis=o=>o.v||o.c;
 const utf8len=s=>encodeURIComponent(s).replace(/%[0-9A-F]{2}/g,'x').length;
-const PRESENCE_MAX=3900; // byte dell'intera presence {g:...}; la room rifiuta oltre 4096
+const PRESENCE_MAX=3900; // byte dell'intera presence {g:...}; la Stanza rifiuta oltre 4096
 function packPerm(o){const a=[o.fd?'?':o.c==='x'?'x':vis(o),Math.round(o.x*1000),Math.round(o.y*1000),(o.tp?1:0)|(o.fd?2:0)|(o.prep?4:0)|(o.atk?8:0),o.p1||0,o.n||0,o.c==='x'?((o.tn||'')+'|'+(o.pt||'')).slice(0,30):0];
   while(a.length>3&&!a[a.length-1])a.pop();return a}
 // hid: la scheda è nascosta. Chi resta nascosto a lungo non conta tra i presenti (vedi awake).
@@ -1615,13 +1762,13 @@ let pubT;function publish(){if(!ROOM)return;clearTimeout(pubT);pubT=setTimeout((
 // Risultati del Match dal mio punto di vista: W vinta, L persa, D pareggio. Al meglio di 3 vince chi arriva a 2, al meglio di 1 chi vince una Partita.
 const mirrorRes=r=>String(r).replace(/[WL]/g,x=>x==='W'?'L':'W');
 function matchScore(r,bo=3){const c=k=>[...String(r)].filter(x=>x===k).length;const w=c('W'),l=c('L'),need=bo===1?1:2;return{w,l,d:c('D'),over:w>=need||l>=need,won:w>=need}}
-async function initRoom(){
-  const chip=$('#roomchip');let room=null;
-  try{room=window.claude&&await window.claude.use('room')}catch(e){}
+function initRoom(){
+  // La Stanza la prepara lo script caricato prima dell'app: web/mqtt-room.js, o dev/mock-room.js in dev.html.
+  const chip=$('#roomchip'),room=window.STANZA||null;
   if(!room){chip.textContent='Online: non disponibile';chip.className='chip';renderTableIfOpen();return}
   ROOM=room;
   room.onConnection(c=>{roomConn=c;roomChip()},e=>{ROOM=null;roomConn=false;publish.err=e?.code||'errore';roomChip()});
-  room.onPeers(ch=>{allPeers=ch.peers.filter(p=>!p.sameTab&&p.kind==='viewer'&&p.presence&&p.presence.g&&p.presence.g.v===2);peersChanged()});
+  room.onPeers(ch=>{allPeers=ch.peers.filter(p=>!p.sameTab&&p.presence&&p.presence.g&&p.presence.g.v===2);peersChanged()});
   document.addEventListener('visibilitychange',()=>{tabHidden=document.hidden;publish()});tabHidden=document.hidden;
   // updatedAt cambia solo quando cambia la presence: senza un controllo periodico una scheda dimenticata non scadrebbe mai.
   setInterval(()=>peersChanged(true),30000);
@@ -1647,14 +1794,14 @@ function peersChanged(timer){const before=peerIds();
   // La barra della modalità si ridisegna solo se cambia ciò che mostra (avversari, risultati), per non rubare i clic.
   const mbKey=JSON.stringify([oppPeer,OPP?.ms,OPP?.bo,OPP?.hg,roomPeers.map(p=>p.presence.g.nm)]);
   if(VIEW==='table'&&!drag){if(mbKey!==peersChanged.mbKey){peersChanged.mbKey=mbKey;renderModebar()}renderOppOnly()}}
-// Chip di stato della room: serve anche a capire, nella prova vera, se l'amico ospite entra e pubblica.
+// Chip di stato della Stanza: dice se si è collegati e quanti altri ci sono.
 let roomConn=false;
 function roomChip(){const chip=$('#roomchip');if(!chip)return;
   if(!ROOM&&!publish.err){chip.textContent='Online: non disponibile';chip.className='chip';return}
   if(publish.err){chip.textContent='Online: presence rifiutata ('+publish.err+')';chip.className='chip warn';return}
-  const n=roomPeers.length,guests=roomPeers.filter(p=>p.guest).length,away=allPeers.length-n;
+  const n=roomPeers.length,away=allPeers.length-n;
   chip.title=away?`${away} schede ferme non contano (nascoste da più di ${STALE_MS/60000} minuti o fuori partita da più di ${STALE_IDLE_MS/60000})`:'';
-  chip.textContent=!roomConn?'Online: in attesa':n?`Online: ${n} altr${n===1?'o':'i'} qui${guests?` (${guests} ospit${guests===1?'e':'i'})`:''}`:'Online: connesso, nessun altro';
+  chip.textContent=!roomConn?'Online: in attesa':n?`Online: ${n} altr${n===1?'o':'i'} qui`:'Online: connesso, nessun altro';
   chip.className='chip'+(roomConn?' on':'')}
 // Se l'avversario registra il risultato di una Partita che io non ho ancora segnato, lo prendo speculare.
 // Si guarda solo quando il suo valore cambia, così «Annulla ultimo risultato» non viene subito ricopiato.
@@ -1693,11 +1840,11 @@ function sizeCards(){const W=$('.board')?.clientWidth||0;const r=document.docume
 function renderModebar(){
   const mb=$('#modebar');const modes=[['bot','Contro il bot'],['online','Contro un amico'],['solo','Goldfish']];
   mb.innerHTML=`<span class="eyebrow">Avversario</span><div class="seg">${modes.map(([k,l])=>`<button data-m="${k}" aria-pressed="${G.mode===k}">${l}</button>`).join('')}</div>
-  ${G.mode==='online'?`<label class="row" style="gap:6px"><span class="muted">Il tuo nome</span><input type="text" id="nick" value="${esc(S.nick||'')}" size="10" maxlength="24" placeholder="Nome"></label>${ROOM?.link?`<button class="btn" id="invite" title="Il link della stanza: chi lo apre gioca con te">Copia il link per l'amico</button>`:''}${roomPeers.length>1?`<select id="opsel" aria-label="Avversario">${oppPeer?'':"<option value='' selected>Scegli l'avversario</option>"}${roomPeers.map(p=>`<option value="${p.peer}" ${p.peer===oppPeer?'selected':''}>${esc(p.presence.g.nm||'Giocatore')}${p.presence.g.idle?' (non in Partita)':''}</option>`).join('')}</select>`:''}`:''}
+  ${G.mode==='online'?`<label class="row" style="gap:6px"><span class="muted">Il tuo nome</span><input type="text" id="nick" value="${esc(S.nick||'')}" size="10" maxlength="24" placeholder="Nome"></label>${ROOM?`<button class="btn" id="invite" title="Il link della stanza: chi lo apre gioca con te">Copia il link per l'amico</button>`:''}${roomPeers.length>1?`<select id="opsel" aria-label="Avversario">${oppPeer?'':"<option value='' selected>Scegli l'avversario</option>"}${roomPeers.map(p=>`<option value="${p.peer}" ${p.peer===oppPeer?'selected':''}>${esc(p.presence.g.nm||'Giocatore')}${p.presence.g.idle?' (non in Partita)':''}</option>`).join('')}</select>`:''}`:''}
   <div class="row" style="margin-left:auto">${matchBarHTML()}</div>`;
   mb.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{if(G.mode===b.dataset.m)return;G.mode=b.dataset.m;if(G.mode==='bot'&&G.me&&!G.bot){startGame();return}commit()});
   $('#nick')&&($('#nick').onchange=e=>{S.nick=e.target.value.trim();saveS();if(G.me)G.me.name=S.nick||'Tu';commit()});
-  // Versione web: la stanza è nel link, che si manda all'amico (su claude.ai la stanza è l'Artifact stesso).
+  // La Stanza è nel link, che si manda all'amico.
   // Se il browser nega gli appunti, il link si mostra già selezionato.
   $('#invite')&&($('#invite').onclick=()=>navigator.clipboard.writeText(ROOM.link).then(()=>toast('Link copiato: mandalo al tuo amico'),()=>openModal('Link della stanza',m=>{
     m.innerHTML=`<p class="muted" style="margin-top:0">Copialo e mandalo al tuo amico: chi lo apre entra in questa stanza.</p><input type="text" readonly value="${esc(ROOM.link)}" style="width:100%">`;
@@ -1717,36 +1864,34 @@ function matchBarHTML(){const res=G.match.res,bo=G.match.bo,s=mScore();const gn=
   return `<span class="mscore${s.over?(s.won?' won':' lost'):''}" title="${G.match.hg?'Two-Headed Giant: una Partita decide il Match, 30 vite, primo mulligan gratis':bo===1?'Al meglio di 1: una Partita decide il Match':'Al meglio di 3: vince chi arriva a 2 Partite'}">${lbl}</span>${t.w+t.l?`<span class="muted mono" style="font-size:12px" title="Match finiti da quando hai azzerato il bilancio">Bilancio ${t.w}-${t.l}</span>`:''}
     ${diff?`<span class="chip warn" title="Il risultato registrato dall'avversario non coincide con il tuo">Avversario: ${esc(scoreText(opp))}</span>`:''}${boDiff?`<span class="chip warn" title="Scegliete lo stesso formato all'inizio del Match">Avversario: ${oppFmt}</span>`:''}
     ${G.me?'<button class="btn" id="endg">Fine Partita ▾</button>':res?'<button class="btn" id="endg" title="Annulla l’ultimo risultato o ricomincia il Match">Match ▾</button>':''}${gameOpen()?`<button class="btn" id="ng" title="Rimescola e ricomincia la Partita ${gn} senza segnare un risultato">Ricomincia</button>`:`<button class="btn${G.me?'':' pri'}" id="ng">${s.over||!res?'Nuova Partita':'Sideboard e prossima Partita'}</button>`}`}
-// Tra una Partita e l'altra: scambi tra Mazzo e Sideboard, nelle stesse Pile della scheda Mazzo (restano nel Mazzo attuale),
+// Tra una Partita e l'altra: scambi tra Mazzo e Sideboard, con lo stesso costruttore della scheda Mazzo (restano nel Mazzo attuale),
 // e scelta di chi inizia.
 // All'inizio di un Match si sceglie anche il formato.
 // Con una Partita aperta (restart) la finestra la ricomincia, ma prima propone di segnarne il risultato.
 function nextGameModal(){const s=mScore();const gn=s.over?1:G.match.res.length+1;const restart=gameOpen();
   const last=s.over?'':G.match.res.slice(-1);let first=last==='W'?'bot':last==='L'||G.mode==='online'?'me':'coin';let fmt=G.match.hg?'hg':G.match.bo;
-  openModal(restart?`Ricomincia la Partita ${gn}`:gn===1?'Nuovo Match':`Partita ${gn}: Sideboard`,m=>{
-    const draw_=()=>{const st=deckStats();const nSide=zoneUids(S,'side').length;const oppL=G.mode==='bot'?'il bot':G.mode==='online'?"l'avversario":'';
+  openModal(restart?`Ricomincia la Partita ${gn}`:gn===1?'Nuovo Match':`Partita ${gn}: Sideboard`,m=>{m.parentElement.classList.add('wide');
+    const draw_=()=>{const st=deckStats();syncLay();const oppL=G.mode==='bot'?'il bot':G.mode==='online'?"l'avversario":'';
       const seg=(lbl,opts,val,attr)=>`<div class="seg" role="group" aria-label="${lbl}">${opts.map(([k,l])=>`<button ${attr}="${k}" aria-pressed="${val==k}">${l}</button>`).join('')}</div>`;
       m.innerHTML=`<div class="row" style="justify-content:space-between"><div class="eyebrow">Mazzo ${st.total} carte${st.total<40?' · <span style="color:var(--bad)">meno di 40</span>':''} · clicca o trascina una carta per spostarla</div>
         <div class="row">${gn===1?seg('Formato del Match',[[1,'Bo1'],[3,'Bo3'],['hg','2HG']],fmt,'data-bo'):''}${seg('Chi inizia',[['me','Inizio io'],...(oppL?[['bot','Inizia '+oppL]]:[['bot','Vado per secondo']]),...(G.mode!=='online'?[['coin','Moneta']]:[])],first,'data-f')}</div></div>
         ${restart?`<div class="row notice"><span>La Partita ${gn} non ha ancora un risultato. Se è finita, segna il risultato:</span><button class="btn sm" data-r="W">Ho vinto</button><button class="btn sm" data-r="L">Ho perso</button><button class="btn sm" data-r="D">Pareggio</button></div>`:''}
         ${gn>1?`<p class="muted" style="margin:0;font-size:12px">${last==='L'?'Hai perso la Partita precedente: scegli tu chi inizia.':last==='W'?"Hai vinto la Partita precedente: sceglie l'avversario chi inizia.":'Pareggio: chi inizia si decide come per la prima Partita.'}</p>`:G.mode==='online'?'<p class="muted" style="margin:0;font-size:12px">Scegliete lo stesso formato, poi decidete chi inizia con una moneta (Dado → Lancia una moneta) e scegliete entrambi la stessa cosa.</p>':''}
-        <h4 class="sbh">Mazzo · clic → Sideboard</h4><div class="zwrap sb" id="sbdeck"></div><div class="basics sbb" id="sbbas"></div>
-        <h4 class="sbh">Sideboard (${nSide}) · clic → Mazzo</h4><div class="zwrap sb" id="sbside"></div>
+        ${builderHTML()}
         ${restart?'':`<p class="muted" style="margin:0;font-size:12px">Durante la Partita l'Apertura e il Mazzo restano bloccati: per tornarci finisci la Partita (Fine Partita) o ${G.mode==='solo'?'chiudila':'abbandonala, che conta come persa'}.${gn===1&&fmt===3?" Nel Bo3 tra una Partita e l'altra si torna al Mazzo.":''}</p>`}
         <div class="row mfoot"><button class="btn pri" id="sbgo">${restart?`Ricomincia la Partita ${gn}`:gn===1?`Inizia il Match (${fmt==='hg'?'2HG':'Bo'+fmt})`:`Inizia la Partita ${gn}`}</button></div>`;
       m.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{recordResult(b.dataset.r);closeModal();nextGameModal()});
       m.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{first=b.dataset.f;draw_()});
       m.querySelectorAll('[data-bo]').forEach(b=>b.onclick=()=>{fmt=b.dataset.bo==='hg'?'hg':+b.dataset.bo;draw_()});
-      ZREDRAW=draw_;$('#sbdeck').appendChild(pilesEl('deck',pileClick('deck',draw_)));$('#sbside').appendChild(pilesEl('side',pileClick('side',draw_)));
-      $('#sbbas').replaceChildren(...basicsEl(draw_).children);
+      ZREDRAW=draw_;mountBuilder(m,draw_);
       $('#sbgo').onclick=()=>{closeModal();startGame(first==='coin'?null:first,fmt)}};
     draw_()})}
 function renderOppOnly(){
   const oz=$('#oppz');if(!oz)return;oz.innerHTML='';
   if(G.mode==='bot'){if(G.bot)oz.appendChild(zoneEl(G.bot,{owner:'bot',live:true,mirror:true}));else oz.innerHTML='<div class="nog">Avvia una nuova Partita: il bot aprirà il suo kit e costruirà un Mazzo.</div>'}
   else if(G.mode==='online'){
-    if(!ROOM)oz.innerHTML='<div class="nog">Il gioco online non è disponibile in questa pagina: aprila su claude.ai (Artifact condiviso con il tuo amico) o dal sito web. Poi ognuno apre il proprio kit, costruisce il Mazzo e sceglie «Contro un amico».</div>';
-    else if(!OPP)oz.innerHTML=`<div class="nog">In attesa dell'avversario… Quando il tuo amico apre ${ROOM.link?'il link della stanza (<b>Copia il link per l\'amico</b>)':'questa pagina'} e sceglie «Contro un amico», il suo campo compare qui in tempo reale.</div>`;
+    if(!ROOM)oz.innerHTML='<div class="nog">Il gioco online non è disponibile in questa pagina: aprila dal sito web. Poi ognuno apre il proprio kit, costruisce il Mazzo e sceglie «Contro un amico».</div>';
+    else if(!OPP)oz.innerHTML=`<div class="nog">In attesa dell'avversario… Quando il tuo amico apre il link della stanza (<b>Copia il link per l'amico</b>) e sceglie «Contro un amico», il suo campo compare qui in tempo reale.</div>`;
     else if(OPP.idle)oz.innerHTML=`<div class="nog"><b>${esc(OPP.nm)}</b> è al tavolo ma non ha ancora iniziato una Partita.</div>`;
     else{const rp=remoteToPlayer(OPP);oz.appendChild(zoneEl(rp,{owner:'opp',live:false,mirror:true}));spreadRemote(oz.querySelector('.bf'),rp.bf,rp.fw)}
   } else oz.innerHTML='<div class="nog" style="margin:0">Modalità goldfish: nessun avversario, prova le tue pescate e la tua curva.</div>';
