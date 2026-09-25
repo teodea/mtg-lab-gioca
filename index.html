@@ -55,7 +55,7 @@ h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.02em;text-wr
 .btn.sm{padding:3px 8px;font-size:12px}
 .btn:disabled{opacity:.45;cursor:default}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-input[type=text],input[type=number],select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px}
+input[type=text],input[type=search],input[type=number],select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px}
 .eyebrow{font:500 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 
 /* card faces */
@@ -125,11 +125,24 @@ input[type=text],input[type=number],select{background:var(--surface);border:1px 
 .phandle{display:none}
 .phead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
 .phead .seg{margin-left:auto}
-.phead .seg button,.pfilt .seg button{padding:4px 9px}
+.phead .seg button{padding:4px 9px}
 .pcount{font-size:11.5px;color:var(--muted)}
-.pfilt{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12px}
-.pfilt .seg button{padding:4px 6px}
-.pfilt .seg button[aria-pressed="false"] .ms{opacity:.55}
+/* barra del filtro: resta in cima alla colonna mentre la lista scorre */
+.qbar{position:sticky;top:-10px;z-index:1;display:flex;flex-direction:column;gap:6px;margin-inline:-10px;padding:8px 10px;background:var(--felt2);border-bottom:1px solid var(--line)}
+.qrow{display:flex;gap:6px}
+.qin{flex:1;min-width:0}
+.qbtns{display:flex;flex-wrap:wrap;gap:6px}
+.qbtns .seg button{padding:4px 7px;font-size:12px}
+.qbtns .seg button[aria-pressed="false"] .ms{opacity:.55}
+.qfoot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 10px;font-size:12px}
+.qcount{font-size:11.5px;color:var(--muted)}
+.qerr{font-size:11.5px;color:var(--ember)}
+.qhelpm{z-index:105}
+.qhelpm .mbox{width:min(720px,100%)}
+.qleg{display:grid;grid-template-columns:minmax(9em,auto) 1fr;gap:10px 14px;font-size:13px}
+.qleg .qk{font-weight:600}
+.qex{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.qleg code,.pairs code,.qhelpm kbd{font:12px var(--mono)}
 .ponly{display:flex;align-items:center;gap:5px;color:var(--muted);cursor:pointer}
 .bpool .pairs{margin:0}
 .pgh{display:flex;justify-content:space-between;font:500 11px var(--mono);letter-spacing:.06em;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--line);padding:8px 2px 3px;margin-bottom:2px}
@@ -168,6 +181,9 @@ input[type=text],input[type=number],select{background:var(--surface);border:1px 
   .phandle{display:flex;position:sticky;top:0;z-index:2;justify-content:space-between;align-items:center;gap:10px;width:calc(100% + 24px);margin:0 -12px;padding:12px 16px;background:var(--felt2);border:0;border-bottom:1px solid var(--line);font-weight:600}
   .phandle .mono{font-weight:500;color:var(--muted);font-size:12px;margin-left:auto}
   .phead .eyebrow,.phead .pcount{display:none}
+  .qbar{top:46px}
+  .qleg{grid-template-columns:1fr;gap:2px}
+  .qleg .qd{margin-bottom:8px}
   .phead .seg{margin-left:0}
 }
 .dtool{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding-block:8px 14px;border-bottom:1px solid var(--line)}
@@ -265,6 +281,7 @@ details>summary{cursor:pointer}
 .zwrap.mate .zgrid{grid-template-columns:repeat(var(--nc),minmax(calc(84px*var(--cs)),calc(120px*var(--cs))))}
 .zwrap.mate .card{cursor:default}
 .zwrap.mate .card.out .face{opacity:.55}
+.zwrap.mate .card.dim .face{opacity:.22}
 /* In una Pila si vede solo la cima di ogni carta: l'etichetta sta in alto a destra, sopra il costo. */
 .mtag{position:absolute;top:3px;right:3px;font:600 9px var(--mono);letter-spacing:.06em;padding:1px 4px;border-radius:3px;background:var(--prism);color:var(--prism-ink);pointer-events:none}
 .mtag.sb{background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
@@ -857,6 +874,114 @@ function pairStats(pool,pair,wr){const ok=pool.filter(x=>!isLand(x.c)&&castableI
 // Una riga per coppia, nell'ordine di PAIRS: nessuna classifica.
 const pairTable=(pool,wr)=>PAIRS.map(p=>({...p,...pairStats(pool,p.k,wr)}));
 
+/* 22-query.js */
+// Filtro delle carte nella costruzione del Mazzo, con la sintassi di Scryfall: parole libere, chiave:valore, - per negare,
+// or, parentesi e virgolette. Due chiavi sono solo nostre: play: (si paga con quei colori, la regola delle coppie) e gih
+// (il GIH WR di 17Lands, solo se ci sono i dati). Una parte scritta male si ignora con un avviso e il resto filtra lo stesso.
+// Un nodo: {k:'word'|'kv'|'not'|'and'|'or'|'bad', src}; 'bad' è una parte ignorata, che non esclude nessuna carta.
+const Q_KEY={name:'name',t:'t',type:'t',o:'o',oracle:'o',c:'c',color:'c',play:'play',mv:'mv',cmc:'mv',manavalue:'mv',
+  pow:'pow',power:'pow',tou:'tou',toughness:'tou',r:'r',rarity:'r',is:'is',gih:'gih'};
+const Q_COLOR={white:'w',blue:'u',black:'b',red:'r',green:'g',colorless:'c',multicolor:'m'};
+const Q_RAR={c:0,common:0,u:1,uncommon:1,r:2,rare:2,m:3,mythic:3};
+const Q_IS={multicolor:'multi',multi:'multi',gold:'multi',colorless:'colorless'};
+const Q_OPS=['!=','<=','>=',':','=','<','>'];
+// Colori nell'ordine WUBRG, maiuscoli: 'rw' → 'WR'.
+const qColors=s=>COLORS.filter(k=>s.toUpperCase().includes(k)).join('');
+function qCmp(a,op,b){return op==='<'?a<b:op==='<='?a<=b:op==='>'?a>b:op==='>='?a>=b:op==='!='?a!==b:a===b}
+
+// Il valore di una chiave, controllato: {v} se va bene, {err} se no.
+function qValue(key,op,raw,wr){const v=raw.toLowerCase(),eq=op===':'||op==='=';
+  if(!raw)return{err:'manca il valore'};
+  if(key==='name'||key==='t'||key==='o')return eq?{v}:{err:`${key}: vuole «:»`};
+  if(key==='mv'||key==='pow'||key==='tou'||key==='gih'){const n=Number(v.replace(',','.'));if(!/^\d+([.,]\d+)?$/.test(v)||!Number.isFinite(n))return{err:'serve un numero'};
+    if(key==='gih'&&!wr)return{err:'gih: mancano i dati di 17Lands'};return{v:n}}
+  if(key==='r')return Object.hasOwn(Q_RAR,v)?{v:Q_RAR[v]}:{err:'rarità: c, u, r o m'};
+  if(key==='is')return !eq?{err:'is: vuole «:»'}:Object.hasOwn(Q_IS,v)?{v:Q_IS[v]}:{err:'is: multicolor o colorless'};
+  const w=Q_COLOR[v]||v;if(!/^[wubrgcm]+$/.test(w))return{err:'colori: lettere tra w, u, b, r, g'};
+  if(key==='play')return !eq?{err:'play: vuole «:»'}:/[cm]/.test(w)?{err:'play: solo w, u, b, r, g'}:{v:qColors(w)};
+  if(/m/.test(w))return w==='m'&&eq?{v:'M'}:{err:'m (multicolore) va da solo, con «:»'};
+  return{v:qColors(w)}}
+
+function parseQuery(src,wr){const s=String(src??'');let i=0;const errs=[];
+  const ws=()=>{while(i<s.length&&/\s/.test(s[i]))i++};
+  const word=w=>new RegExp(`^${w}(?=[\\s()]|$)`,'i').test(s.slice(i));
+  const node=(st,o)=>({...o,src:s.slice(st,i).trim()});
+  const bad=(st,why)=>{const n=node(st,{k:'bad'});errs.push(`«${n.src}»: ${why}`);return n};
+  // Una parola o un valore: tra virgolette (anche non chiuse) o fino a uno spazio o a una parentesi.
+  function text(){if(s[i]==='"'){const e=s.indexOf('"',i+1),v=s.slice(i+1,e<0?s.length:e);i=e<0?s.length:e+1;return v}
+    const st=i;while(i<s.length&&!/[\s()]/.test(s[i]))i++;return s.slice(st,i)}
+  function term(){const st=i,m=/^([a-z]+)(!=|<=|>=|:|=|<|>)/i.exec(s.slice(i));
+    if(!m){const v=text();return node(st,{k:'word',v:v.toLowerCase()})}
+    i+=m[0].length;const raw=text(),key=Q_KEY[m[1].toLowerCase()],op=m[2];
+    if(!key)return bad(st,`chiave «${m[1]}» sconosciuta`);
+    const r=qValue(key,op,raw,wr);return r.err?bad(st,r.err):node(st,{k:'kv',key,op:op===':'&&!['c','r'].includes(key)?'=':op,v:r.v})}
+  function unary(){const st=i;
+    if(s[i]==='-'){i++;if(i>=s.length||/[\s)]/.test(s[i]))return bad(st,'il «-» va attaccato a quello che neghi');const n=unary();return node(st,{k:'not',n})}
+    if(s[i]==='('){i++;const n=or_();ws();if(s[i]===')')i++;else errs.push('una parentesi non è chiusa');
+      return n?{...n,src:s.slice(st,i).trim()}:bad(st,'parentesi vuote')}
+    return term()}
+  function and_(){const kids=[];for(;;){ws();if(i>=s.length||s[i]===')'||word('or'))break;if(word('and')){i+=3;continue}kids.push(unary())}
+    return kids.length>1?{k:'and',kids,src:kids.map(k=>k.src).join(' ')}:kids[0]||null}
+  function or_(){const st=i,kids=[and_()];for(;;){ws();if(!word('or'))break;i+=2;kids.push(and_())}
+    const k=kids.filter(Boolean);return k.length>1?node(st,{k:'or',kids:k}):k[0]||null}
+  const top=[];for(;;){const n=or_();if(n)top.push(n);ws();if(i>=s.length)break;errs.push('c\'è una parentesi chiusa di troppo');i++}
+  return{node:top.length>1?{k:'and',kids:top,src:top.map(k=>k.src).join(' ')}:top[0]||null,errs}}
+
+// La carta cid passa il nodo? Il testo si cerca in tutte le parti della carta (Angel // Seed Suture).
+function qMatch(n,cid,wr){if(!n||n.k==='bad')return true;const c=BY[cid],fs=c.f||[];
+  const any=(f,v)=>fs.some(x=>(x[f]||'').toLowerCase().includes(v));
+  if(n.k==='not')return n.n.k==='bad'||!qMatch(n.n,cid,wr);
+  if(n.k==='and')return n.kids.every(k=>qMatch(k,cid,wr));
+  if(n.k==='or'){const ok=n.kids.filter(k=>k.k!=='bad');return !ok.length||ok.some(k=>qMatch(k,cid,wr))}
+  if(n.k==='word')return c.n.toLowerCase().includes(n.v)||any('n',n.v)||any('t',n.v)||any('o',n.v);
+  const {key,op,v}=n;
+  if(key==='name')return c.n.toLowerCase().includes(v)||any('n',v);
+  if(key==='t')return any('t',v);
+  if(key==='o')return any('o',v);
+  if(key==='play')return inPair(cid,v);
+  if(key==='mv')return qCmp(cmc(cid),op,v);
+  if(key==='gih')return wr?.[cid]!=null&&qCmp(wr[cid],op,v);
+  if(key==='pow'||key==='tou'){const f=key==='pow'?'p':'d';return fs.some(x=>x[f]!=null&&qCmp(parseFloat(x[f])||0,op,v))}
+  if(key==='r')return Object.hasOwn(Q_RAR,c.r)&&qCmp(Q_RAR[c.r],op==':'?'=':op,v);
+  const cs=c.c||'';
+  if(key==='is')return v==='multi'?cs.length>1:!cs;
+  // c: con «:» vuol dire «almeno questi colori»; c:c incolore, c:m multicolore.
+  if(v==='M')return cs.length>1;
+  const has=[...v].every(k=>cs.includes(k)),within=[...cs].every(k=>v.includes(k));
+  if(op===':'&&!v)return !cs;
+  return op===':'||op==='>='?has:op==='='?has&&within:op==='!='?!(has&&within):op==='<='?within:op==='<'?within&&cs.length<v.length:has&&cs.length>v.length}
+
+// Il filtro pronto: test(cid) e gli avvisi sulle parti ignorate. Senza niente di scritto passa tutto.
+function compileQuery(q,wr){const {node,errs}=parseQuery(q,wr);return{empty:!node,errs,test:cid=>qMatch(node,cid,wr)}}
+
+// I pulsanti rapidi e le coppie scrivono e leggono un pezzo della barra, tra i termini in AND al primo livello, e lasciano
+// il resto com'è. Un pezzo è di un pulsante solo nella forma che il pulsante scrive (play:wu, mv=2, (mv=2 or mv=3)…).
+const Q_MV={'1':'mv<=1','2':'mv=2','3':'mv=3','4':'mv=4','5':'mv=5','6':'mv>=6'};
+function qMvBtn(n){if(n?.k!=='kv'||n.key!=='mv')return null;
+  return n.op==='<='&&n.v===1?'1':n.op==='>='&&n.v===6?'6':n.op==='='&&n.v>=2&&n.v<=5&&Number.isInteger(n.v)?String(n.v):null}
+function qKind(n){if(!n)return null;
+  if(n.k==='kv'&&n.key==='play')return 'play';
+  if(n.k==='kv'&&n.key==='is')return n.v;
+  if(n.k==='kv'&&n.key==='t'&&n.v==='creature')return 'cre';
+  if(n.k==='not'&&n.n.k==='kv'&&n.n.key==='t'&&n.n.v==='creature')return 'noncre';
+  if(qMvBtn(n)||(n.k==='or'&&n.kids.every(qMvBtn)))return 'mv';
+  return null}
+function qTerms(q){const {node}=parseQuery(q,{});if(!node)return[];
+  if(node.k==='and')return node.kids;
+  return [node.k==='or'&&!/^\(.*\)$/.test(node.src)?{...node,src:`(${node.src})`}:node]}
+// Lo stato dei pulsanti dalla barra: colori di play:, costi accesi, creature o no, incolore e multicolore.
+function qState(q){const st={play:'',mv:new Set(),cre:null,colorless:false,multi:false};
+  qTerms(q).forEach(n=>{const k=qKind(n);if(k==='play')st.play=n.v;else if(k==='mv')(n.k==='or'?n.kids:[n]).forEach(x=>st.mv.add(qMvBtn(x)));
+    else if(k==='cre'||k==='noncre')st.cre=k;else if(k)st[k]=true});
+  return st}
+// Toglie i pezzi del tipo kind e, se c'è, mette src al posto del primo (o in fondo).
+function qSet(q,kind,src){const ts=qTerms(q),out=[];let put=false;
+  const kinds=kind==='cre'?['cre','noncre']:[kind];
+  ts.forEach(n=>{if(!kinds.includes(qKind(n))){out.push(n.src);return}if(src&&!put){out.push(src);put=true}});
+  if(src&&!put)out.push(src);return out.join(' ')}
+const qPlaySrc=cols=>cols?'play:'+qColors(cols).toLowerCase():'';
+const qMvSrc=set=>{const b=Object.keys(Q_MV).filter(k=>set.has(k)).map(k=>Q_MV[k]);return b.length>1?`(${b.join(' or ')})`:b[0]||''};
+
 /* 30-images.js */
 const IMG={};let packsLoaded=0;
 function b64url(d){const s=atob(d.slice(d.indexOf(',')+1));const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return URL.createObjectURL(new Blob([a],{type:'image/jpeg'}))}
@@ -1283,9 +1408,9 @@ function basicsEl(redraw,zoom){const bs=document.createElement('div');bs.classNa
 let ZREDRAW=()=>renderDeck();
 // Costruttore del Mazzo (ADR 0005): a sinistra le Pile del Mazzo e sotto quelle del Sideboard, che si chiudono; a destra la colonna
 // del Pool, in lista o a griglia. Lo usano la scheda Mazzo e la finestra tra le Partite. BLD: preferenze di chi guarda, non del
-// Mazzo (vista della colonna, Sideboard aperto, filtri per colore, solo non messe). POOL_OPEN: il pannello su schermo stretto.
-const PV=['list','grid'],PCOLS=[...COLORS,'C'];
-let BLD=(o=>({view:PV.includes(o?.view)?o.view:'list',sbOpen:o?.sbOpen!==false,only:o?.only===true,cols:Array.isArray(o?.cols)?PCOLS.filter(k=>o.cols.includes(k)):[]}))(LS.get('mtg-lab:costruttore-v1',null));
+// Mazzo (vista della colonna, Sideboard aperto, solo non messe). POOL_OPEN: il pannello su schermo stretto.
+const PV=['list','grid'];
+let BLD=(o=>({view:PV.includes(o?.view)?o.view:'list',sbOpen:o?.sbOpen!==false,only:o?.only===true}))(LS.get('mtg-lab:costruttore-v1',null));
 const saveBld=()=>LS.set('mtg-lab:costruttore-v1',BLD);
 let POOL_OPEN=false,BROOT=document;
 // extra: sotto le Pile, nella scheda Mazzo il Pool del Compagno.
@@ -1299,17 +1424,15 @@ function builderHTML(extra=''){const st=deckStats(),nIn=zoneUids(S,'side').lengt
   ${extra}</div>
   <aside class="bpool${POOL_OPEN?' open':''}" data-dz="pool" aria-label="Pool">${poolHeadHTML()}<div class="pbody"></div></aside></div>`}
 function poolHeadHTML(){const n=myPool().length,nd=zoneUids(S,'deck').length,ns=zoneUids(S,'side').length;
-  const cl={W:'Bianco',U:'Blu',B:'Nero',R:'Rosso',G:'Verde',C:'Incolore e terre'};
-  return `<button class="phandle" aria-expanded="${POOL_OPEN}"><span>Pool · ${n} carte</span><span class="mono">M ${nd} · S ${ns}</span><span>${POOL_OPEN?'▾':'▴'}</span></button>
+  return `<button class="phandle" aria-expanded="${POOL_OPEN}"><span>Pool · ${n} carte<span class="pflt"${fq()?'':' hidden'}> · filtrato</span></span><span class="mono">M ${nd} · S ${ns}</span><span>${POOL_OPEN?'▾':'▴'}</span></button>
   <div class="phead"><span class="eyebrow">Pool · ${n} carte${S.team?' tue':''}</span><span class="pcount mono" title="Nel Mazzo · nelle Pile del Sideboard">M ${nd} · S ${ns}</span>
   <span class="seg" role="group" aria-label="Vista del Pool">${[['list','Lista'],['grid','Griglia']].map(([k,l])=>`<button data-pv="${k}" aria-pressed="${BLD.view===k}">${l}</button>`).join('')}</span></div>
-  <div class="pfilt"><span class="seg" role="group" aria-label="Filtra per colore">${PCOLS.map(k=>`<button data-pc="${k}" aria-pressed="${BLD.cols.includes(k)}" title="${cl[k]}" aria-label="${cl[k]}"><span class="ms ${k==='C'?'':k}">${k==='C'?'◇':''}</span></button>`).join('')}</span>
-  <label class="ponly"><input type="checkbox" data-po${BLD.only?' checked':''}> solo non messe</label></div>
+  ${qbarHTML()}
   ${pairsHTML()}`}
-// Le carte della colonna, per colore e poi per costo, con i filtri. mark: 'm' nel Mazzo, 's' nelle Pile del Sideboard.
+// Le carte della colonna, per colore e poi per costo, con il filtro della barra e «solo non messe». mark: 'm' nel Mazzo, 's' nelle Pile del Sideboard.
 function poolBody(body,redraw){const inD=new Set(zoneUids(S,'deck')),inS=new Set(zoneUids(S,'side')),keys=GROUPS.col.keys;
   const mark=u=>inD.has(u)?'m':inS.has(u)?'s':'';
-  const shown=x=>{if(BLD.only&&mark(x.u))return false;if(!BLD.cols.length)return true;const k=BY[x.c].c||'';return BLD.cols.some(c=>c==='C'?!k:k.includes(c))};
+  const f=compileQuery(fq(),WR),shown=x=>!(BLD.only&&mark(x.u))&&f.test(x.c);
   const cards=myPool().filter(shown).sort((a,b)=>keys.indexOf(groupKey('col',a.c))-keys.indexOf(groupKey('col',b.c))||byCost(a,b));
   const groups=keys.map(k=>[k,cards.filter(x=>groupKey('col',x.c)===k)]).filter(([,a])=>a.length);
   const click=x=>()=>{placeCard(x.u,inD.has(x.u)?'side':'deck');saveS();redraw()};
@@ -1341,10 +1464,9 @@ function mountBuilder(root,redraw){const st=deckStats(),q=s=>root.querySelector(
   const pool=q('.bpool');poolBody(q('.pbody'),redraw);
   q('.phandle').onclick=()=>{POOL_OPEN=!POOL_OPEN;redraw()};
   pool.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{BLD.view=b.dataset.pv;saveBld();redraw()});
-  pool.querySelectorAll('[data-pc]').forEach(b=>b.onclick=()=>{const k=b.dataset.pc;BLD.cols=BLD.cols.includes(k)?BLD.cols.filter(c=>c!==k):PCOLS.filter(c=>c===k||BLD.cols.includes(c));saveBld();redraw()});
   q('[data-po]').onchange=e=>{BLD.only=e.target.checked;saveBld();redraw()};
   const pd=q('.pairs');pd.ontoggle=()=>PAIRS_OPEN=pd.open;
-  pd.querySelectorAll('tr[data-pair]').forEach(r=>r.onclick=()=>{PAIR_HI=PAIR_HI===r.dataset.pair?null:r.dataset.pair;markPair()});markPair()}
+  bindQbar(root,redraw)}
 function renderDeck(){
   syncMate();syncLay();ZREDRAW=renderDeck;const el=$('#v-deck');const st=deckStats();const cur=findSave(S.saveId);
   const curve=[0,0,0,0,0,0,0];st.cards.filter(x=>!isLand(x.c)).forEach(x=>curve[Math.min(6,Math.max(0,Math.floor(cmc(x.c))))]++);const cm=Math.max(1,...curve);
@@ -1366,19 +1488,15 @@ function renderDeck(){
   publish();
 }
 // Tabella delle coppie in cima alla colonna del Pool (issue #25): solo numeri, sulle proprie carte, nell'ordine fisso di PAIRS.
-// Il GIH WR compare quando ci sono i dati (issue #20). Aperta o chiusa e coppia evidenziata non si salvano.
-let PAIRS_OPEN=false,PAIR_HI=null;
-const pairSum=()=>PAIR_HI?'evidenziata: '+PAIRS.find(p=>p.k===PAIR_HI).n:'giocabili, creature e curva per coppia';
+// Il GIH WR compare quando ci sono i dati (issue #20). Aperta o chiusa non si salva. La coppia evidenziata è il play: della barra.
+let PAIRS_OPEN=false;
+const pairSum=()=>{const p=PAIRS.find(p=>qColors(p.k)===qState(fq()).play);return p?'evidenziata: '+p.n:'giocabili, creature e curva per coppia'};
 function pairsHTML(){const wr=!!WR,num=(n,cv)=>`<td class="${cv?'cv':''}${n?'':' z'}">${n}</td>`,pip=k=>[...k].map(c=>`<span class="ms ${c}"></span>`).join('');
   return `<details class="pairs"${PAIRS_OPEN?' open':''}><summary><span class="eyebrow">Coppie di colori</span> <span class="muted psum">${pairSum()}</span></summary>
   <div class="ptwrap"><table class="ptab"><thead><tr><th rowspan="2" scope="col">Coppia</th><th rowspan="2" scope="col">Giocabili</th><th rowspan="2" scope="col">Creature</th><th rowspan="2" scope="col">Multicolori</th><th colspan="6" scope="colgroup" class="cvh">Curva</th>${wr?'<th rowspan="2" scope="col">GIH WR medio<br>23 migliori</th>':''}</tr>
   <tr>${['1','2','3','4','5','6+'].map(c=>`<th scope="col" class="cv">${c}</th>`).join('')}</tr></thead>
   <tbody>${pairTable(myPool(),WR).map(r=>`<tr data-pair="${r.k}"><th scope="row"><button class="pbtn" aria-pressed="false">${pip(r.k)}<span>${esc(r.n)}</span></button></th>${num(r.play)}${num(r.cre)}${num(r.multi)}${r.curve.map(n=>num(n,1)).join('')}${wr?`<td>${r.wr==null?'—':r.wr.toFixed(1).replace('.',',')+'%'}</td>`:''}</tr>`).join('')}</tbody></table></div>
-  <p class="muted zhint">Le carte ${S.team?'tue ':''}del Pool, senza terre, che si lanciano con i due colori (un ibrido basta che ne abbia uno). Clic su una riga: nelle Pile e nel Pool si attenuano le carte fuori dalla coppia; un altro clic toglie l'evidenza.</p></details>`}
-// Attenua nelle Pile e nella colonna del Pool le carte fuori dalla coppia evidenziata, e segna la sua riga.
-function markPair(){const r=BROOT;r.querySelectorAll('.bld [data-u]').forEach(c=>c.classList.toggle('dim',!!PAIR_HI&&!inPair(c.dataset.cid,PAIR_HI)));
-  r.querySelectorAll('.pairs tr[data-pair]').forEach(t=>{const on=t.dataset.pair===PAIR_HI;t.classList.toggle('on',on);t.querySelector('.pbtn').setAttribute('aria-pressed',on)});
-  const n=r.querySelector('.psum');if(n)n.textContent=pairSum()}
+  <p class="muted zhint">Le carte ${S.team?'tue ':''}del Pool, senza terre, che si lanciano con i due colori (un ibrido basta che ne abbia uno). Clic su una riga: scrive <code>play:</code> nella barra del filtro, e nelle Pile si attenuano le carte fuori dalla coppia; un altro clic lo toglie.</p></details>`}
 // Pool del Compagno, in sola lettura: le sue carte (secondo i passaggi noti) nelle stesse Pile, segnate «Mazzo» se sono nel Mazzo
 // che pubblica nella presence. Le carte non hanno data-u, quindi non si trascinano né si cliccano; ci si trascinano sopra le proprie.
 // Le Pile si ridispongono a ogni disegno con le impostazioni di chi guarda (mlay), che non fanno parte del Mazzo salvato.
@@ -1393,7 +1511,7 @@ function renderMate(){const g=$('#mgrid'),inDeck=mateDeckSet(),byU=poolByU();
   if(!MATE){const n=document.createElement('div');n.className='nog';n.style.margin='0';n.textContent=`Il ${seatName(1-S.seat)} non è collegato: apra il codice ${S.seed} e scelga il suo posto. Intanto vedi le sue carte, senza sapere quali ha nel Mazzo; quelle che gli dai le riceverà appena si collega.`;g.appendChild(n)}
   g.appendChild(gridEl('mate',arrangeZone({...mateSet()},mateCards()),u=>{const x=byU[u],d=inDeck.has(u);const w=document.createElement('div');w.className='card'+(MATE&&!d?' out':'');
     setPreviewAttrs(w,x);w.appendChild(faceEl(x,{foil:!!x.f}));addWR(w,x.c);
-    if(MATE){const t=document.createElement('span');t.className='mtag'+(d?'':' sb');t.textContent=d?'Mazzo':'Side';w.appendChild(t)}return w},false))}
+    if(MATE){const t=document.createElement('span');t.className='mtag'+(d?'':' sb');t.textContent=d?'Mazzo':'Side';w.appendChild(t)}return w},false));markFilter(BROOT)}
 // Dai al Compagno: dal trascinamento sul suo Pool o dal bottone della carta ingrandita.
 function giveToMate(u){const x=poolByU()[u];if(!x||!giveCard(u)){toast('Non è una tua carta: può dartela solo il Compagno');return}
   syncLay();saveS();closeZoom();renderDeck();toast(`Data al Compagno: ${BY[x.c].n}`+(MATE?'':'. La riceverà appena si collega'))}
@@ -1545,6 +1663,84 @@ function timerModal(){openModal('Timer di costruzione',m=>{const draw_=()=>{cons
 // Kit nuovo: con auto il timer riparte da capo, come quando al prerelease si aprono le buste.
 function timerNewKit(){if(!TIMER.auto)return false;setTimer(timerStart(timerReset(TIMER),Date.now()));return true}
 function initTimer(){$('#timerchip').onclick=timerModal;paintTimer();setInterval(paintTimer,1000)}
+
+/* 44-querybar.js */
+// Barra del filtro in cima alla colonna del Pool (22-query.js): nella colonna le carte che non corrispondono spariscono, nelle Pile
+// (e nel Pool del Compagno) diventano grigie e si spostano come sempre. I pulsanti e la tabella delle coppie scrivono nella barra.
+// Il filtro vale per il Kit aperto e non si salva: resta tra la scheda Mazzo e la finestra tra le Partite, si azzera ricaricando
+// la pagina o con un Kit nuovo. QFOCUS: la barra aveva il cursore quando il costruttore si è ridisegnato, e lo riprende.
+let FILTRO={seed:null,q:''},QFOCUS=null;
+const fq=()=>{if(FILTRO.seed!==S.seed)FILTRO={seed:S.seed,q:''};return FILTRO.q};
+const Q_CL={W:'bianco',U:'blu',B:'nero',R:'rosso',G:'verde'};
+function qbarHTML(){const a=document.activeElement;QFOCUS=a?.classList?.contains('qin')?[a.selectionStart,a.selectionEnd]:null;
+  const b=(attr,k,label,html)=>`<button ${attr}="${k}" aria-pressed="false" title="${label}" aria-label="${label}">${html}</button>`;
+  return `<div class="qbar">
+  <div class="qrow"><input type="search" class="qin" value="${esc(fq())}" placeholder="Cerca: flying, t:creature, mv<=2…" aria-label="Filtra le carte (tasto /)" autocomplete="off" spellcheck="false"><button class="btn sm qhelp" title="Come si scrive un filtro" aria-label="Come si scrive un filtro">?</button></div>
+  <div class="qbtns"><span class="seg" role="group" aria-label="Si gioca con questi colori">${COLORS.map(k=>b('data-qc',k,`Si gioca col ${Q_CL[k]}`,`<span class="ms ${k}"></span>`)).join('')}</span><span class="seg" role="group" aria-label="Incolore e multicolore">${b('data-qk','colorless','Incolore','◇')}${b('data-qk','multi','Multicolore','Multi')}</span></div>
+  <div class="qbtns"><span class="seg" role="group" aria-label="Valore di mana">${Object.keys(Q_MV).map(k=>b('data-qm',k,`Valore di mana ${k==='1'?'1 o meno':k==='6'?'6 o più':k}`,k==='6'?'6+':k)).join('')}</span><span class="seg" role="group" aria-label="Creature o no">${b('data-qt','cre','Solo creature','Creature')}${b('data-qt','noncre','Solo non creature','Non creature')}</span></div>
+  <div class="qfoot"><label class="ponly"><input type="checkbox" data-po${BLD.only?' checked':''}> solo non messe</label><span class="qcount mono"></span></div>
+  <div class="qerr" hidden></div></div>`}
+// Collega la barra scritta da qbarHTML. Scrivendo si ridisegnano solo la colonna e il grigio delle Pile, così il cursore resta.
+function bindQbar(root,redraw){const qb=root.querySelector('.qbar');if(!qb)return;const inp=qb.querySelector('.qin');
+  const refresh=()=>{poolBody(root.querySelector('.pbody'),redraw);markFilter(root)};
+  const set=q=>{FILTRO.q=q;inp.value=q;refresh()};
+  const toggle=(kind,on,src)=>set(qSet(fq(),kind,on?'':src));
+  inp.oninput=()=>{FILTRO.q=inp.value;refresh()};
+  inp.onkeydown=e=>{if(e.key!=='Escape')return;e.stopPropagation();if(inp.value)set('');else inp.blur()};
+  qb.querySelectorAll('[data-qc]').forEach(b=>b.onclick=()=>{const k=b.dataset.qc,p=qState(fq()).play;set(qSet(fq(),'play',qPlaySrc(p.includes(k)?p.replace(k,''):p+k)))});
+  qb.querySelectorAll('[data-qk]').forEach(b=>b.onclick=()=>{const k=b.dataset.qk;toggle(k,qState(fq())[k],'is:'+(k==='multi'?'multicolor':'colorless'))});
+  qb.querySelectorAll('[data-qm]').forEach(b=>b.onclick=()=>{const m=qState(fq()).mv,k=b.dataset.qm;m.has(k)?m.delete(k):m.add(k);set(qSet(fq(),'mv',qMvSrc(m)))});
+  qb.querySelectorAll('[data-qt]').forEach(b=>b.onclick=()=>{const k=b.dataset.qt;toggle('cre',qState(fq()).cre===k,k==='cre'?'t:creature':'-t:creature')});
+  root.querySelectorAll('.pairs tr[data-pair]').forEach(r=>r.onclick=()=>{const k=qColors(r.dataset.pair);toggle('play',qState(fq()).play===k,qPlaySrc(k))});
+  qb.querySelector('.qhelp').onclick=()=>qHelp(q=>{set(q);inp.focus()});
+  if(QFOCUS){inp.focus();inp.setSelectionRange(...QFOCUS);QFOCUS=null}
+  markFilter(root)}
+// Grigio nelle Pile, pulsanti accesi secondo la barra, riga della coppia, conteggi e avvisi sulle parti ignorate.
+function markFilter(root){if(!root?.querySelector)return;const q=fq(),f=compileQuery(q,WR),st=qState(q);
+  root.querySelectorAll('.bmain .card[data-cid]').forEach(c=>c.classList.toggle('dim',!f.test(c.dataset.cid)));
+  const on=(sel,fn)=>root.querySelectorAll(sel).forEach(b=>b.setAttribute('aria-pressed',!!fn(b.dataset)));
+  on('[data-qc]',d=>st.play.includes(d.qc));on('[data-qk]',d=>st[d.qk]);on('[data-qm]',d=>st.mv.has(d.qm));on('[data-qt]',d=>st.cre===d.qt);
+  root.querySelectorAll('.pairs tr[data-pair]').forEach(t=>{const o=qColors(t.dataset.pair)===st.play;t.classList.toggle('on',o);t.querySelector('.pbtn').setAttribute('aria-pressed',o)});
+  const ps=root.querySelector('.psum');if(ps)ps.textContent=pairSum();
+  const pf=root.querySelector('.pflt');if(pf)pf.hidden=f.empty;
+  const cnt=root.querySelector('.qcount');if(cnt){const byU=poolByU(),n=us=>us.filter(u=>byU[u]&&f.test(byU[u].c)).length,mate=root.querySelector('#mgrid');
+    cnt.textContent=f.empty?'':`${myPool().filter(x=>f.test(x.c)).length} su ${myPool().length} · M ${n(zoneUids(S,'deck'))} · S ${n(zoneUids(S,'side'))}`+(mate?` · Compagno ${mateCards().filter(x=>f.test(x.c)).length}`:'');
+    cnt.title=f.empty?'':'Corrispondono · nel Mazzo · nelle Pile del Sideboard'+(mate?' · nel Pool del Compagno':'')}
+  const er=root.querySelector('.qerr');if(er){er.hidden=!f.errs.length;er.textContent=f.errs.length?'Ignorato: '+f.errs.join('; '):''}}
+
+// Legenda: una finestra sopra tutto, anche sopra quella tra le Partite. Un clic su un esempio lo mette nella barra.
+const Q_HELP=()=>[
+  ['Parole libere','Cercano nel nome, nel tipo e nel testo della carta, in tutte le sue parti. Con più parole devono esserci tutte; le virgolette tengono insieme una frase.',['flying','"draw a card"']],
+  ['<code>name:</code> nome','Solo nel nome della carta.',['name:angel']],
+  ['<code>t:</code> tipo','Nella riga del tipo: tipi e sottotipi, in inglese.',['t:creature','t:instant','t:wizard']],
+  ['<code>o:</code> testo','Nel testo delle regole.',['o:destroy','o:"draw a card"']],
+  ['<code>play:</code> si gioca con','Le carte che si pagano con questi colori: un ibrido basta che ne abbia uno, le incolori sempre. È la regola della tabella delle coppie, ed è quello che scrivono i pulsanti colore. Solo di mtg-lab, non di Scryfall.',['play:wu','play:r']],
+  ['<code>c:</code> colore','I colori della carta, come su Scryfall: <code>c:r</code> almeno rossa, <code>c=wu</code> esattamente bianco-blu, <code>c&lt;=wu</code> nessun colore oltre a bianco e blu (una ibrida bianco-nera resta fuori: per il sealed usa <code>play:</code>), <code>c:m</code> multicolore, <code>c:c</code> incolore. Lettere: w bianco, u blu, b nero, r rosso, g verde.',['c:r','c=wu','c:m']],
+  ['<code>mv</code> valore di mana','Il costo di mana totale. Va anche <code>cmc</code>.',['mv=2','mv<=3','mv>=5']],
+  ['<code>pow</code> e <code>tou</code>','Forza e costituzione.',['pow>=3','tou<=2']],
+  ['<code>r:</code> rarità','c comune, u non comune, r rara, m mitica.',['r:u','r>=r']],
+  ['<code>is:</code>','Multicolore o incolore.',['is:multicolor','is:colorless']],
+  ...(WR?[['<code>gih</code> GIH WR','La percentuale di vittorie con la carta in mano, dai dati di 17Lands. Solo di mtg-lab.',['gih>=58']]]:[]),
+  ['Confronti','Dopo la chiave: <code>:</code> <code>=</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code>.',[]],
+  ['<code>-</code> escludere','Il meno davanti toglie le carte che corrispondono.',['-t:creature','-t:land']],
+  ['<code>or</code> oppure','Basta una delle due.',['t:instant or t:sorcery']],
+  ['<code>( )</code> parentesi','Raggruppano, di solito con <code>or</code>.',['(mv=2 or mv=3) t:creature']]];
+function qHelp(use){const o=document.createElement('div');o.className='modal qhelpm';
+  o.innerHTML=`<div class="mbox" role="dialog" aria-modal="true" aria-labelledby="qht"><div class="mhead"><h3 id="qht">Come si scrive un filtro</h3><button class="btn sm" data-x>Chiudi</button></div>
+  <div class="mbody"><p class="muted" style="margin:0">La sintassi è quella di Scryfall. Nella colonna del Pool restano solo le carte che corrispondono; nelle Pile le altre diventano grigie, ma si spostano come sempre. Clicca un esempio per provarlo.</p>
+  <div class="qleg">${Q_HELP().map(([k,d,ex])=>`<div class="qk">${k}</div><div class="qd">${d}${ex.length?`<div class="qex">${ex.map(x=>`<button class="btn sm" data-ex="${esc(x)}"><code>${esc(x)}</code></button>`).join('')}</div>`:''}</div>`).join('')}</div>
+  <p class="muted" style="margin:0;font-size:12px">Tastiera: <kbd>/</kbd> porta alla barra, <kbd>Esc</kbd> la svuota. Una parte scritta male si ignora, con un avviso sotto la barra, e il resto filtra lo stesso.</p></div></div>`;
+  const key=e=>{if(e.key==='Escape'){e.stopPropagation();e.preventDefault();close()}};
+  const close=()=>{o.remove();document.removeEventListener('keydown',key,true)};
+  document.addEventListener('keydown',key,true);
+  o.addEventListener('pointerdown',e=>{if(e.target===o)close()});
+  o.querySelector('[data-x]').onclick=close;
+  o.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>{close();use(b.dataset.ex)});
+  document.body.appendChild(o);o.querySelector('[data-x]').focus()}
+// «/» porta alla barra del costruttore in vista: la scheda Mazzo, o la finestra tra le Partite se è aperta.
+document.addEventListener('keydown',e=>{if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey||e.target.closest?.('input,textarea,select,[contenteditable]')||$('.qhelpm'))return;
+  const modal=!$('#modal').hidden;if(modal?!$('#modal').contains(BROOT):VIEW!=='deck')return;
+  const inp=BROOT.querySelector?.('.qin');if(!inp?.isConnected)return;e.preventDefault();inp.focus();inp.select()});
 
 /* 50-game.js */
 let G=LS.get('mtg-lab:fra-game-v1',LS.get('fra-game-v1',null))||{mode:'bot',me:null,bot:null,log:[],first:'me'};
