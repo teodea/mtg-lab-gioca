@@ -114,8 +114,10 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .bar i{display:block;height:8px;border-radius:4px;background:var(--mC)}
 
 /* deck builder */
-/* Costruttore (ADR 0005): Pile a sinistra, colonna del Pool a destra, ferma mentre la pagina scorre. */
+/* Costruttore (ADR 0007): Pile del Mazzo al centro, colonna del Sideboard a destra, ferma mentre la pagina scorre. Nella vista
+   Pile la colonna non c'è e il Sideboard sta sotto il Mazzo. */
 .bld{display:grid;grid-template-columns:minmax(0,1fr) var(--pw,clamp(270px,24vw,360px));gap:16px;align-items:start}
+.bld.spile{grid-template-columns:minmax(0,1fr)}
 .bmain{min-width:0}
 /* Nella colonna più stretta le Pile si restringono fino al minimo prima di far scorrere la zona. */
 .bld .zgrid{flex:0 1 auto;min-width:min-content}
@@ -125,7 +127,7 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .bpool.drop-hot{box-shadow:inset 0 0 0 2px var(--prism)}
 .phandle{display:none}
 .phead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
-.phead .seg{margin-left:auto}
+.phead .seg,.zhead .pview{margin-left:auto}
 .phead .seg button{padding:4px 9px}
 .pcount{font-size:11.5px;color:var(--muted)}
 /* barra del filtro: resta in cima alla colonna mentre la lista scorre */
@@ -136,6 +138,12 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .qbtns .seg button{padding:4px 7px;font-size:12px}
 .qbtns .seg button[aria-pressed="false"] .ms{opacity:.55}
 .qfoot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 10px;font-size:12px}
+/* Sopra le Pile la barra sta su una riga sola, e va a capo quando non c'è posto. */
+.bmain .qbar{position:static;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:10px 0 0;padding:0;background:none;border:0}
+.bmain .qrow{flex:1 1 240px;max-width:400px}
+.bmain .qfoot:empty,.bmain .qfoot:has(.qcount:empty){display:none}
+.bmain .pairs{margin:10px 0 0}
+.zsec[data-dz].drop-hot{border-radius:8px;box-shadow:inset 0 0 0 2px var(--prism)}
 .qcount{font-size:11.5px;color:var(--muted)}
 .qerr{font-size:11.5px;color:var(--ember)}
 .qhelpm{z-index:105}
@@ -144,21 +152,16 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .qleg .qk{font-weight:600}
 .qex{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .qleg code,.pairs code,.qhelpm kbd{font:12px var(--mono)}
-.ponly{display:flex;align-items:center;gap:5px;color:var(--muted);cursor:pointer}
 .bpool .pairs{margin:0}
 .pgh{display:flex;justify-content:space-between;font:500 11px var(--mono);letter-spacing:.06em;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--line);padding:8px 2px 3px;margin-bottom:2px}
 .pgh span:last-child{color:var(--faint)}
-.prow{display:grid;grid-template-columns:minmax(3.2em,auto) minmax(0,1fr) auto 1.4em;gap:8px;align-items:center;padding:3px 4px;border-radius:5px;font-size:13px;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.prow{display:grid;grid-template-columns:minmax(3.2em,auto) minmax(0,1fr) auto;gap:8px;align-items:center;padding:3px 4px;border-radius:5px;font-size:13px;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .prow:hover{background:var(--surface)}
 .prow .pcost{white-space:nowrap;font-size:12px;text-align:right}
 .prow .pn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prow .pfoil{color:var(--prism);font-size:10px}
 .prow .pwr{font:500 11px var(--mono);color:var(--muted)}
 .prow .pwr.low{color:var(--faint)}
-.prow .pmk{font:600 10px var(--mono);text-align:center;border-radius:3px;line-height:1.6}
-.prow.m{opacity:.5}
-.prow.m .pmk{background:var(--prism);color:var(--prism-ink)}
-.prow.s .pmk{background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
 .prow.dim{opacity:.22}
 .prow.drag-src{opacity:.3}
 /* Della carta si vede solo la cima: sotto i 110 px il nome non si legge, quindi i colori vanno a capo invece di stringersi
@@ -166,14 +169,10 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(110px*var(--cs)),1fr));gap:10px 8px}
 .pcol h4{margin:0 0 4px;font:500 10px var(--mono);color:var(--muted);letter-spacing:.04em;display:flex;justify-content:space-between;gap:4px;white-space:nowrap;overflow:hidden}
 .bpool .card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
-.bpool .card.in-m .face{opacity:.45}
 .bpool .card.dim .face{opacity:.22;filter:grayscale(.7)}
 .bpool .card.drag-src{opacity:.3}
-.bpool .mtag{top:2px;right:2px;font-size:8px;padding:0 3px}
-.sbtog{background:none;border:1px solid var(--line);border-radius:5px;width:24px;height:24px;padding:0;color:var(--muted);line-height:1}
-.sbtog:hover{color:var(--text);border-color:var(--faint)}
 .mbox.wide{width:min(1400px,100%);max-height:94vh}
-/* Su schermo stretto la colonna del Pool diventa un pannello che si apre dal basso (come in Arena sul telefono). */
+/* Su schermo stretto la colonna del Sideboard diventa un pannello che si apre dal basso (come in Arena sul telefono). */
 @media (max-width:760px){
   .bld{grid-template-columns:minmax(0,1fr)}
   #v-deck{padding-bottom:56px}
@@ -1069,8 +1068,7 @@ document.documentElement.style.setProperty('--cs',CS);
 /* 40-state.js */
 // v2: pool con varianti (v) e slot (s). I salvataggi v1 vengono ignorati.
 // Chiavi con il prefisso del progetto; la vecchia chiave senza prefisso viene ancora letta una volta.
-// deck: uid delle carte nel Mazzo. Il Sideboard è tutto il resto delle proprie carte del Pool (sideboard()); sb: quelle che il
-// giocatore ha messo nelle Pile del Sideboard, le altre restano nella colonna del Pool (ADR 0006).
+// deck: uid delle carte nel Mazzo. Il Sideboard è tutto il resto delle proprie carte del Pool (sideboard(), ADR 0007).
 // lay: la disposizione in Pile delle due zone (vedi sotto). saveId: il Mazzo salvato da cui viene lo stato attuale.
 let S=LS.get('mtg-lab:fra-sealed-v2',LS.get('fra-sealed-v2',null));
 function saveS(){LS.set('mtg-lab:fra-sealed-v2',S)}
@@ -1111,13 +1109,12 @@ const ordCmp=o=>okOrder(o)?ORDERS[o].cmp:byCost;
 // cm e rm: le colonne (o le righe) sono «Personalizzate», perché il giocatore ha messo una carta in una Pila che per quel
 // criterio non è la sua (issue #28). Scegliere di nuovo un criterio ridispone la zona da capo e le toglie.
 // Predefiniti: il Mazzo per costo, con le creature sopra e le altre carte sotto come in Arena; il Sideboard per colore, come lo si
-// stende al tavolo, con le rare e le mitiche in una riga sotto le comuni e le non comuni.
-const ZONE_DEF={deck:{c:'cmc',r:'rc',o:'cmc'},side:{c:'col',r:'rr',o:'cmc'}};
+// stende al tavolo, su una riga sola come nella colonna.
+const ZONE_DEF={deck:{c:'cmc',r:'rc',o:'cmc'},side:{c:'col',r:'none',o:'cmc'}};
 const ZONES=['deck','side'];
-// Gli uid di una zona, tra le proprie carte: il Mazzo, oppure le carte messe nelle Pile del Sideboard.
-function zoneUids(s,z){const mine=new Set(myPool(s).map(x=>x.u));if(z==='deck')return s.deck.filter(u=>mine.has(u));
-  const d=new Set(s.deck);return (s.sb||[]).filter(u=>mine.has(u)&&!d.has(u))}
-// Il Sideboard delle regole (CR 100.4b): tutte le proprie carte del Pool fuori dal Mazzo, messe nelle Pile o no.
+// Gli uid di una zona, tra le proprie carte: il Mazzo o il Sideboard.
+function zoneUids(s,z){if(z!=='deck')return sideboard(s);const mine=new Set(myPool(s).map(x=>x.u));return s.deck.filter(u=>mine.has(u))}
+// Il Sideboard (CR 100.4b): tutte le proprie carte del Pool fuori dal Mazzo.
 function sideboard(s=S){const d=new Set(s.deck);return myPool(s).filter(x=>!d.has(x.u)).map(x=>x.u)}
 // Gli uid di una zona nell'ordine delle Pile: colonna per colonna, dall'alto in basso.
 const pileOrder=(z,s=S)=>(s.lay?.[z]?.p||[]).flatMap(col=>col.flat());
@@ -1146,13 +1143,11 @@ function syncZone(s,name){const byU=byUid(s.pool),want=zoneUids(s,name),z=s.lay[
 function syncLay(s=S){if(!s.lay||typeof s.lay!=='object')s.lay={};ZONES.forEach(n=>syncZone(s,n));return s.lay}
 // Ridispone una zona da capo, con le sue impostazioni.
 function resetZone(name,s=S){if(!s.lay)s.lay={};const z=s.lay[name];s.lay[name]=z?{c:z.c,r:z.r,o:z.o}:null;syncZone(s,name)}
-// Sposta una carta nella zona 'deck' o 'side', o la rimette tra le carte non messe del Pool ('pool'). Senza col va nella Pila
-// delle sue chiavi; con col e row nella Pila indicata, alla posizione pos (contata senza la carta spostata). Una colonna o una riga
-// oltre l'ultima ne crea una nuova.
-function placeCard(u,zone,col,row,pos){syncLay();const sb=(S.sb||[]).filter(x=>x!==u);
+// Sposta una carta nella zona 'deck' o 'side'. Senza col va nella Pila delle sue chiavi; con col e row nella Pila indicata, alla
+// posizione pos (contata senza la carta spostata). Una colonna o una riga oltre l'ultima ne crea una nuova.
+function placeCard(u,zone,col,row,pos){syncLay();
   if(zone==='deck'&&!S.deck.includes(u))S.deck.push(u);if(zone!=='deck')S.deck=S.deck.filter(x=>x!==u);
-  if(zone==='side')sb.push(u);S.sb=sb;
-  if(col!=null&&zone!=='pool'){ZONES.forEach(n=>S.lay[n].p.forEach(c=>c.forEach((p,j)=>c[j]=p.filter(x=>x!==u))));const z=S.lay[zone];row=row??0;
+  if(col!=null){ZONES.forEach(n=>S.lay[n].p.forEach(c=>c.forEach((p,j)=>c[j]=p.filter(x=>x!==u))));const z=S.lay[zone];row=row??0;
     if(col>=z.ck.length){col=z.ck.length;z.ck.push(null);z.p.push(z.rk.map(()=>[]))}
     if(row>=z.rk.length){row=z.rk.length;z.rk.push(null);z.p.forEach(c=>c.push([]))}
     const p=z.p[col][row];p.splice(pos??p.length,0,u);
@@ -1165,13 +1160,10 @@ function migrateLay(o){if(!o||o.lay)return o;const lay={},deck=new Set(o.deck||[
     lay.deck={c:o.grp,r:'none',o:'cmc',ck:cols.map(c=>GROUPS[o.grp].keys.includes(c.k)?c.k:null),rk:['-'],p:cols.map(c=>[c.u.filter(u=>deck.has(u))])}}
   const side=(Array.isArray(o.side)?o.side:[]).filter(u=>!deck.has(u));
   if(side.length){const d=ZONE_DEF.side;lay.side={...d,ck:[null],rk:[GROUPS[d.r].keys[0]],p:[[side]]}}
-  // Il Sideboard scelto a mano è proprio quello che ora sta nelle Pile del Sideboard (sb).
-  if(!Array.isArray(o.sb))o.sb=side;
   delete o.side;delete o.cols;delete o.grp;o.lay=lay;return o}
-// Stati di prima della colonna del Pool (ADR 0006), senza sb: nelle Pile del Sideboard c'era tutto il resto del Pool. Le Pile
-// si svuotano, con le loro impostazioni, e quelle carte tornano tra le non messe; per le regole restano Sideboard.
-function migrateSb(o){if(!o||Array.isArray(o.sb))return o;o.sb=[];const z=o.lay?.side;
-  if(z&&isGrp(z.c)&&isGrp(z.r))o.lay.side=arrangeZone({c:z.c,r:z.r,o:Object.hasOwn(ORDERS,z.o)?z.o:'cmc'},[]);return o}
+// Stati dell'ADR 0006, con sb: le carte messe nelle Pile del Sideboard. Ora nelle Pile c'è tutto il Sideboard (ADR 0007): quelle
+// carte restano dove sono e le altre entrano nella Pila delle loro chiavi.
+function dropSb(o){if(o&&'sb' in o){delete o.sb;if(o.lay)syncLay(o)}return o}
 // Disposizione letta da un testo non fidato: criteri esistenti, chiavi dei criteri e uid del Pool (us).
 function cleanLay(lay,us){const out={};if(!lay||typeof lay!=='object')return out;
   for(const n of ZONES){const z=lay[n];if(!z||!isGrp(z.c)||!isGrp(z.r)||!Array.isArray(z.ck)||!Array.isArray(z.rk)||!Array.isArray(z.p))continue;
@@ -1183,7 +1175,7 @@ function cleanLay(lay,us){const out={};if(!lay||typeof lay!=='object')return out
 // Two-Headed Giant: team = 8 o 12 Buste (0 per il Kit individuale), seat = il posto scelto, 0 per il Compagno A e 1 per il B.
 // opened conta le Buste aperte tra le proprie; viewB è l'indice della Busta guardata, tra tutte quelle del Kit.
 // at: quando è stato aperto il Kit, per capire chi dei due Compagni ha il Kit più recente; matePeer: l'ultimo Compagno trovato.
-function freshKit(seed){const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],sb:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null};S.viewB=firstOwn();saveS()}
+function freshKit(seed){const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null};S.viewB=firstOwn();saveS()}
 // Le Buste di chi guarda: tutte nel Kit individuale, metà nel Kit di squadra.
 const ownCount=(s=S)=>s.team?s.team/2:6;
 const firstOwn=(s=S)=>s.team&&s.seat?s.team/2:0;
@@ -1202,29 +1194,29 @@ const myPool=(s=S)=>s.team?s.pool.filter((x,i)=>ownerAt(s,i)===s.seat):s.pool;
 const openedPool=(s=S)=>s.team?s.pool.filter(x=>x.o===s.seat):s.pool;
 // Dai al Compagno: può farlo solo il proprietario, e la carta esce dal suo Mazzo e dal suo Sideboard. false se non è sua.
 function giveCard(u,s=S){const i=s.pool.findIndex(x=>x.u===u);if(!s.team||i<0||ownerAt(s,i)!==s.seat)return false;
-  s.tc={...s.tc,[i]:((s.tc||{})[i]||0)+1};s.deck=s.deck.filter(x=>x!==u);s.sb=(s.sb||[]).filter(x=>x!==u);return true}
-// Unisce i contatori del Compagno. Le carte appena ricevute sono tra le non messe del Pool, quelle non più proprie escono dal
-// Mazzo e dalle Pile del Sideboard (succede dopo un ricaricamento con uno stato vecchio). got: gli uid ricevuti.
+  s.tc={...s.tc,[i]:((s.tc||{})[i]||0)+1};s.deck=s.deck.filter(x=>x!==u);return true}
+// Unisce i contatori del Compagno. Le carte appena ricevute vanno nel Sideboard, quelle non più proprie escono dal Mazzo
+// (succede dopo un ricaricamento con uno stato vecchio). got: gli uid ricevuti.
 function mergeTeam(tc,s=S){if(!s.team)return{changed:false,got:[]};const own=()=>new Set(myPool(s).map(x=>x.u));
   const before=own(),was=JSON.stringify(s.tc||{});s.tc=mergeTc(s.tc||{},tc);if(JSON.stringify(s.tc)===was)return{changed:false,got:[]};
-  const after=own();s.deck=s.deck.filter(u=>after.has(u));s.sb=(s.sb||[]).filter(u=>after.has(u));return{changed:true,got:[...after].filter(u=>!before.has(u))}}
+  const after=own();s.deck=s.deck.filter(u=>after.has(u));return{changed:true,got:[...after].filter(u=>!before.has(u))}}
 // Contatori letti da un testo non fidato: solo indici del Pool e interi positivi.
 function cleanTc(tc,n){const out={};if(tc&&typeof tc==='object')for(const i in tc){const k=+i,t=Math.floor(+tc[i]);if(Number.isInteger(k)&&k>=0&&k<n&&t>0&&t<1e6)out[k]=t}return out}
 // Cambia posto, solo durante l'Apertura: le Buste aperte ripartono da una, e dal Mazzo escono le carte del Compagno.
 function setSeat(seat){if(!S.team||S.seat===seat||!inOpening())return;S.seat=seat;S.opened=1;S.viewB=firstOwn();const mine=new Set(myPool().map(x=>x.u));
-  S.deck=S.deck.filter(u=>mine.has(u));S.sb=[];S.lay=null;S.saveId=null;saveS()}
+  S.deck=S.deck.filter(u=>mine.has(u));S.lay=null;S.saveId=null;saveS()}
 if(!S||!S.pool)freshKit(newSeed());
-migrateLay(S);migrateSb(S);
+migrateLay(S);dropSb(S);
 let VIEW='open';
 
 // Mazzi salvati: ognuno porta con sé il suo Pool, così resta giocabile anche dopo aver aperto altri kit.
 // Stanno nel localStorage di chi guarda la pagina; con «Esporta» si copiano come testo.
 let SAVES=LS.get('mtg-lab:fra-mazzi-v1',[]);
 const persistSaves=()=>LS.set('mtg-lab:fra-mazzi-v1',SAVES);
-if(SAVES.some(s=>!s.lay||!Array.isArray(s.sb))){SAVES.forEach(s=>migrateSb(migrateLay(s)));persistSaves()}
-// La parte di un salvataggio che è il Mazzo: carte, carte nelle Pile del Sideboard, terre base, disposizione delle Pile e,
-// nel Kit di squadra, i passaggi delle carte tra i Compagni. Il Sideboard è il resto del Pool.
-const deckPart=o=>({seat:o.seat||0,deck:[...o.deck],sb:[...(o.sb||[])],basics:{...o.basics},lay:JSON.parse(JSON.stringify(o.lay||{})),tc:{...o.tc}});
+if(SAVES.some(s=>!s.lay||'sb' in s)){SAVES.forEach(s=>dropSb(migrateLay(s)));persistSaves()}
+// La parte di un salvataggio che è il Mazzo: carte, terre base, disposizione delle Pile e, nel Kit di squadra, i passaggi delle
+// carte tra i Compagni. Il Sideboard è il resto del Pool.
+const deckPart=o=>({seat:o.seat||0,deck:[...o.deck],basics:{...o.basics},lay:JSON.parse(JSON.stringify(o.lay||{})),tc:{...o.tc}});
 const findSave=id=>SAVES.find(s=>s.id===id);
 // Senza nome sovrascrive il Mazzo salvato da cui si è partiti; con un nome ne crea uno nuovo.
 function saveDeck(name){syncLay();let s=!name&&findSave(S.saveId);
@@ -1258,11 +1250,10 @@ function importDeck(code){const m=/^MTGLAB1:([A-Za-z0-9+/=]+)$/.exec(String(code
   const us=new Set(o.pool.map(x=>x.u));const only=a=>(Array.isArray(a)?a:[]).filter(u=>us.has(u));
   const basics={};COLORS.forEach(k=>basics[k]=Math.max(0,Math.min(60,Math.floor(+o.basics?.[k]||0))));
   const s={id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:String(o.name||'Mazzo importato').slice(0,40),ts:Date.now(),
-    seed:String(o.seed||'').slice(0,24),team:[8,12].includes(o.team)?o.team:0,seat:o.seat===1?1:0,boosters:okBoosters(o.boosters),promo:o.promo&&BY[o.promo.c]?o.promo:null,pool:o.pool,deck:only(o.deck),...(Array.isArray(o.sb)?{sb:only(o.sb)}:{}),tc:cleanTc(o.tc,o.pool.length),basics,st:{mw:0,ml:0,gw:0,gl:0}};
+    seed:String(o.seed||'').slice(0,24),team:[8,12].includes(o.team)?o.team:0,seat:o.seat===1?1:0,boosters:okBoosters(o.boosters),promo:o.promo&&BY[o.promo.c]?o.promo:null,pool:o.pool,deck:only(o.deck),tc:cleanTc(o.tc,o.pool.length),basics,st:{mw:0,ml:0,gw:0,gl:0}};
   // Codici di prima delle due zone: il Sideboard scelto e le colonne del Mazzo passano da migrateLay, che controlla i criteri.
   if(o.lay)s.lay=cleanLay(o.lay,us);
   else migrateLay(Object.assign(s,{side:only(o.side),grp:o.grp,cols:Array.isArray(o.cols)?o.cols.map(c=>({k:c?.k??null,u:only(c?.u)})):null}));
-  migrateSb(s);
   SAVES.unshift(s);persistSaves();return s.id}
 
 /* 41-views.js */
@@ -1382,9 +1373,9 @@ const ZONE_NAME={deck:'Mazzo',side:'Sideboard',mate:'Pool del Compagno'};
 // scegliendo un criterio, anche quello di prima, la zona si ridispone da capo.
 const zoneSeg=(name,lbl,attr,opts,val,perso)=>`<span class="zset"><span class="muted">${lbl}</span><span class="seg" role="group" aria-label="${lbl}: ${ZONE_NAME[name]}">${opts.map(([k,l])=>`<button data-zone="${name}" ${attr}="${k}" aria-pressed="${!perso&&val===k}">${l}</button>`).join('')}${perso?'<button aria-pressed="true" aria-disabled="true" title="Hai messo a mano delle carte fuori dalla loro Pila: scegli un criterio per ridisporle">Personalizzato</button>':''}</span></span>`;
 // L'ordine si sceglie solo quando ce n'è più d'uno: il GIH WR compare quando arrivano i dati (issue #20).
-// lead: prima del titolo (il bottone che chiude il Sideboard); segs=false toglie le scorciatoie, a zona chiusa.
-function zoneHead(name,title,z=S.lay[name],{lead='',segs=true}={}){const ords=Object.keys(ORDERS).filter(okOrder);
-  return `<div class="zhead">${lead}<span class="eyebrow">${title}</span>${segs?zoneSeg(name,'Colonne','data-zc',COL_GROUPS.map(k=>[k,GROUPS[k].l]),z.c,z.cm)+zoneSeg(name,'Righe','data-zr',ROW_GROUPS.map(k=>[k,GROUPS[k].l]),z.r,z.rm)+(ords.length>1?zoneSeg(name,'Ordine','data-zo',ords.map(k=>[k,ORDERS[k].l]),okOrder(z.o)?z.o:'cmc'):''):''}</div>`}
+// tail: in fondo alla testata (la vista del Sideboard).
+function zoneHead(name,title,z=S.lay[name],{tail=''}={}){const ords=Object.keys(ORDERS).filter(okOrder);
+  return `<div class="zhead"><span class="eyebrow">${title}</span>${zoneSeg(name,'Colonne','data-zc',COL_GROUPS.map(k=>[k,GROUPS[k].l]),z.c,z.cm)+zoneSeg(name,'Righe','data-zr',ROW_GROUPS.map(k=>[k,GROUPS[k].l]),z.r,z.rm)+(ords.length>1?zoneSeg(name,'Ordine','data-zo',ords.map(k=>[k,ORDERS[k].l]),okOrder(z.o)?z.o:'cmc'):'')}${tail}</div>`}
 // Una zona stesa in Pile: le colonne in orizzontale e le righe una sotto l'altra. Se edit, le Pile accettano le carte trascinate
 // e in fondo ci sono una colonna vuota a destra e una riga vuota sotto dove crearne di nuove. el(u): la carta da mostrare.
 function gridEl(name,z,el,edit){const nc=z.ck.length,nr=z.rk.length;
@@ -1419,47 +1410,44 @@ function basicsEl(redraw,zoom){const bs=document.createElement('div');bs.classNa
   return bs}
 // Chi ridisegna dopo un trascinamento tra le Pile: la scheda Mazzo o la finestra tra le Partite.
 let ZREDRAW=()=>renderDeck();
-// Costruttore del Mazzo (ADR 0005): a sinistra le Pile del Mazzo e sotto quelle del Sideboard, che si chiudono; a destra la colonna
-// del Pool, in lista o a griglia. Lo usano la scheda Mazzo e la finestra tra le Partite. BLD: preferenze di chi guarda, non del
-// Mazzo (vista della colonna, Sideboard aperto, solo non messe). POOL_OPEN: il pannello su schermo stretto.
-const PV=['list','grid'];
-let BLD=(o=>({view:PV.includes(o?.view)?o.view:'list',sbOpen:o?.sbOpen!==false,only:o?.only===true}))(LS.get('mtg-lab:costruttore-v1',null));
+// Costruttore del Mazzo (ADR 0007): al centro le Pile del Mazzo, a destra la colonna del Sideboard, in lista o a griglia. Con la
+// vista Pile la colonna sparisce e il Sideboard si stende in Pile sotto il Mazzo, come la column view di Arena. Lo usano la scheda
+// Mazzo e la finestra tra le Partite. BLD: preferenze di chi guarda, non del Mazzo (la vista del Sideboard). POOL_OPEN: il
+// pannello su schermo stretto.
+const PV=[['list','Lista'],['grid','Griglia'],['piles','Pile']];
+let BLD=(o=>({view:PV.some(([k])=>k===o?.view)?o.view:'list'}))(LS.get('mtg-lab:costruttore-v1',null));
 const saveBld=()=>LS.set('mtg-lab:costruttore-v1',BLD);
 let POOL_OPEN=false,BROOT=document;
+const viewSeg=()=>`<span class="seg pview" role="group" aria-label="Vista del Sideboard">${PV.map(([k,l])=>`<button data-pv="${k}" aria-pressed="${BLD.view===k}">${l}</button>`).join('')}</span>`;
+const sideTitle=()=>`Sideboard · ${sideboard().length} carte${S.team?' tue':''}`;
 // extra: sotto le Pile, nella scheda Mazzo il Pool del Compagno.
-function builderHTML(extra=''){const st=deckStats(),nIn=zoneUids(S,'side').length,nAll=sideboard().length,open=BLD.sbOpen;
-  const tog=`<button class="sbtog" aria-expanded="${open}" title="${open?'Chiudi':'Apri'} le Pile del Sideboard">${open?'▾':'▸'}</button>`;
-  return `<div class="bld"><div class="bmain">
-  <section class="zsec">${zoneHead('deck',`Mazzo · ${S.deck.length} carte e ${st.basics} terre base · clic → Sideboard`)}<div class="zwrap" data-zw="deck"></div></section>
-  <section class="zsec">${zoneHead('side',`Sideboard · ${nIn} nelle Pile, ${nAll} in tutto${S.team?` (le tue, ${seatName(S.seat)})`:''}${open?' · clic → Mazzo':''}`,S.lay.side,{lead:tog,segs:open})}
-  ${open?`<div class="zwrap" data-zw="side"></div>${nIn?'<div class="row"><button class="btn sm" data-sbclear>Rimetti tutte nel Pool</button></div>':''}`:''}
-  <p class="muted zhint">Trascina le carte dalla colonna del Pool alle Pile, tra le Pile o tra Mazzo e Sideboard; per togliere una carta trascinala sulla colonna. Le carte che non metti nelle Pile sono comunque Sideboard. Le scorciatoie ridispongono la zona da capo.</p></section>
+function builderHTML(extra=''){const st=deckStats(),piles=BLD.view==='piles';
+  return `<div class="bld${piles?' spile':''}"><div class="bmain">
+  <section class="zsec">${zoneHead('deck',`Mazzo · ${S.deck.length} carte e ${st.basics} terre base · clic → Sideboard`)}${qbarHTML('deck')}<div class="zwrap" data-zw="deck"></div>
+  <p class="muted zhint">Trascina le carte tra il Sideboard e le Pile, da una Pila all'altra o in una colonna o una riga nuova; per togliere una carta dal Mazzo trascinala sul Sideboard. Le scorciatoie ridispongono la zona da capo.</p></section>
+  ${piles?`<section class="zsec" data-dz="side">${zoneHead('side',sideTitle()+' · clic → Mazzo',S.lay.side,{tail:viewSeg()})}${qbarHTML('side')}${pairsHTML()}<div class="zwrap" data-zw="side"></div></section>`:''}
   ${extra}</div>
-  <aside class="bpool${POOL_OPEN?' open':''}" data-dz="pool" aria-label="Pool">${poolHeadHTML()}<div class="pbody"></div></aside></div>`}
-function poolHeadHTML(){const n=myPool().length,nd=zoneUids(S,'deck').length,ns=zoneUids(S,'side').length;
-  return `<button class="phandle" aria-expanded="${POOL_OPEN}"><span>Pool · ${n} carte<span class="pflt"${fq()?'':' hidden'}> · filtrato</span></span><span class="mono">M ${nd} · S ${ns}</span><span>${POOL_OPEN?'▾':'▴'}</span></button>
-  <div class="phead"><span class="eyebrow">Pool · ${n} carte${S.team?' tue':''}</span><span class="pcount mono" title="Nel Mazzo · nelle Pile del Sideboard">M ${nd} · S ${ns}</span>
-  <span class="seg" role="group" aria-label="Vista del Pool">${[['list','Lista'],['grid','Griglia']].map(([k,l])=>`<button data-pv="${k}" aria-pressed="${BLD.view===k}">${l}</button>`).join('')}</span></div>
-  ${qbarHTML()}
+  ${piles?'':`<aside class="bpool${POOL_OPEN?' open':''}" data-dz="pool" aria-label="Sideboard">${poolHeadHTML()}<div class="pbody"></div></aside>`}</div>`}
+function poolHeadHTML(){
+  return `<button class="phandle" aria-expanded="${POOL_OPEN}"><span>Sideboard · ${sideboard().length} carte<span class="pflt"${fq('side')?'':' hidden'}> · filtrato</span></span><span class="mono">Mazzo ${S.deck.length}</span><span>${POOL_OPEN?'▾':'▴'}</span></button>
+  <div class="phead"><span class="eyebrow">${sideTitle()}</span>${viewSeg()}</div>
+  ${qbarHTML('side')}
   ${pairsHTML()}`}
-// Le carte della colonna, per colore e poi per costo, con il filtro della barra e «solo non messe». mark: 'm' nel Mazzo, 's' nelle Pile del Sideboard.
-function poolBody(body,redraw){const inD=new Set(zoneUids(S,'deck')),inS=new Set(zoneUids(S,'side')),keys=GROUPS.col.keys;
-  const mark=u=>inD.has(u)?'m':inS.has(u)?'s':'';
-  const f=compileQuery(fq(),WR),shown=x=>!(BLD.only&&mark(x.u))&&f.test(x.c);
-  const cards=myPool().filter(shown).sort((a,b)=>keys.indexOf(groupKey('col',a.c))-keys.indexOf(groupKey('col',b.c))||byCost(a,b));
+// Le carte della colonna, cioè il Sideboard, per colore e poi per costo, con il Filtro del Sideboard. Il clic le manda nel Mazzo.
+function poolBody(body,redraw){if(!body)return;const keys=GROUPS.col.keys,byU=poolByU(),all=sideboard().map(u=>byU[u]),f=compileQuery(fq('side'),WR);
+  const cards=all.filter(x=>f.test(x.c)).sort((a,b)=>keys.indexOf(groupKey('col',a.c))-keys.indexOf(groupKey('col',b.c))||byCost(a,b));
   const groups=keys.map(k=>[k,cards.filter(x=>groupKey('col',x.c)===k)]).filter(([,a])=>a.length);
-  const click=x=>()=>{placeCard(x.u,inD.has(x.u)?'side':'deck');saveS();redraw()};
-  const tag=(w,m)=>{if(!m)return;const t=document.createElement('span');t.className='mtag'+(m==='s'?' sb':'');t.textContent=m.toUpperCase();w.appendChild(t)};
+  const click=x=>()=>{placeCard(x.u,'deck');saveS();redraw()};
   body.replaceChildren();
-  if(!cards.length){body.innerHTML=`<p class="muted zhint">${myPool().length?'Nessuna carta con questi filtri.':'Nessuna carta nel Pool.'}</p>`;return}
+  if(!cards.length){body.innerHTML=`<p class="muted zhint">${all.length?'Nessuna carta con questi filtri.':myPool().length?'Tutte le tue carte sono nel Mazzo.':'Nessuna carta nel Pool.'}</p>`;return}
   if(BLD.view==='grid'){const g=document.createElement('div');g.className='pgrid';
     groups.forEach(([k,a])=>{const c=document.createElement('div');c.className='col pcol';c.innerHTML=`<h4><span>${esc(GROUPS.col.t[k])}</span><span>${a.length}</span></h4>`;
-      const st=document.createElement('div');st.className='stack';a.forEach(x=>{const m=mark(x.u),w=cardEl(x,m?'in-'+m:'',click(x));tag(w,m);st.appendChild(w)});c.appendChild(st);g.appendChild(c)});
+      const st=document.createElement('div');st.className='stack';a.forEach(x=>st.appendChild(cardEl(x,'',click(x))));c.appendChild(st);g.appendChild(c)});
     body.appendChild(g);return}
   groups.forEach(([k,a])=>{const h=document.createElement('div');h.className='pgh';h.innerHTML=`<span>${esc(GROUPS.col.t[k])}</span><span>${a.length}</span>`;body.appendChild(h);
-    a.forEach(x=>{const m=mark(x.u),c=BY[x.c],r=document.createElement('div');r.className='prow'+(m?' '+m:'');r.dataset.u=x.u;setPreviewAttrs(r,x);
+    a.forEach(x=>{const c=BY[x.c],r=document.createElement('div');r.className='prow';r.dataset.u=x.u;setPreviewAttrs(r,x);
       const wr=WR&&WR[x.c]!=null?`<span class="pwr${WRN[x.c]<WR_MIN?' low':''}">${fmtWR(WR[x.c])}</span>`:'<span></span>';
-      r.innerHTML=`<span class="pcost">${mana(c.f[0].m||'')}</span><span class="pn">${esc(c.n)}${x.f?' <span class="pfoil" title="Foil">✦</span>':''}</span>${wr}<span class="pmk">${m.toUpperCase()}</span>`;
+      r.innerHTML=`<span class="pcost">${mana(c.f[0].m||'')}</span><span class="pn">${esc(c.n)}${x.f?' <span class="pfoil" title="Foil">✦</span>':''}</span>${wr}`;
       r.onclick=click(x);
       // Con il mouse, passandoci sopra si vede la carta, a sinistra della colonna; col dito, o se a sinistra non c'è posto
       // (il pannello del telefono), l'anteprima coprirebbe la riga e resta il tasto destro.
@@ -1472,12 +1460,9 @@ function mountBuilder(root,redraw){const st=deckStats(),q=s=>root.querySelector(
   basicCol.appendChild(basicsEl(redraw,true));zd.appendChild(basicCol);
   q('[data-zw=side]')?.appendChild(pilesEl('side',pileClick('side',redraw)));
   [['zc','c'],['zr','r'],['zo','o']].forEach(([a,f])=>root.querySelectorAll(`.bmain [data-${a}]`).forEach(b=>b.onclick=()=>{const n=b.dataset.zone;(n==='mate'?mateSet():S.lay[n])[f]=b.dataset[a];if(n!=='mate')resetZone(n);saveS();redraw()}));
-  q('.sbtog').onclick=()=>{BLD.sbOpen=!BLD.sbOpen;saveBld();redraw()};
-  const clr=q('[data-sbclear]');if(clr)clr.onclick=()=>{S.sb=[];syncLay();saveS();redraw()};
-  const pool=q('.bpool');poolBody(q('.pbody'),redraw);
-  q('.phandle').onclick=()=>{POOL_OPEN=!POOL_OPEN;redraw()};
-  pool.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{BLD.view=b.dataset.pv;saveBld();redraw()});
-  q('[data-po]').onchange=e=>{BLD.only=e.target.checked;saveBld();redraw()};
+  root.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{BLD.view=b.dataset.pv;saveBld();redraw()});
+  poolBody(q('.pbody'),redraw);
+  const ph=q('.phandle');if(ph)ph.onclick=()=>{POOL_OPEN=!POOL_OPEN;redraw()};
   const pd=q('.pairs');pd.ontoggle=()=>PAIRS_OPEN=pd.open;
   bindQbar(root,redraw)}
 function renderDeck(){
@@ -1486,12 +1471,12 @@ function renderDeck(){
   el.innerHTML=`<div class="dtool"><div><div class="eyebrow">Mazzo</div><div class="count ${st.total>=40?'ok':''}">${st.total}<small> / 40</small></div></div>
   <div class="stats"><span>Creature <b class="mono">${st.cre}</b></span><span>Altre magie <b class="mono">${st.cards.length-st.cre-st.cards.filter(x=>isLand(x.c)).length}</b></span><span>Terre <b class="mono">${st.lands}</b></span></div>
   <div class="curve" title="Curva di mana">${curve.map((n,i)=>`<div style="height:${n/cm*100}%"><span>${i===6?'6+':i}</span></div>`).join('')}</div>
-  <div class="row" style="margin-left:auto"><span class="savedas" title="Il Mazzo salvato da cui stai lavorando">${cur?`${esc(cur.name)}${deckDirty()?' · <b>modificato</b>':' · salvato'}`:'Non salvato'}</span><button class="btn" id="save">${cur?'Salva':'Salva…'}</button><button class="btn" id="saves">Mazzi salvati${SAVES.length?` (${SAVES.length})`:''}</button><button class="btn" id="auto">Auto-costruisci</button><button class="btn" id="lands">Suggerisci terre</button><button class="btn" id="copy">Copia lista (Arena)</button><button class="btn" id="forge">Esporta per Forge</button><button class="btn" id="clear" title="Rimette le carte del Mazzo nel Pool e azzera le terre base">Svuota</button><button class="btn pri" id="play">Gioca →</button></div>${gihSource()}</div>
+  <div class="row" style="margin-left:auto"><span class="savedas" title="Il Mazzo salvato da cui stai lavorando">${cur?`${esc(cur.name)}${deckDirty()?' · <b>modificato</b>':' · salvato'}`:'Non salvato'}</span><button class="btn" id="save">${cur?'Salva':'Salva…'}</button><button class="btn" id="saves">Mazzi salvati${SAVES.length?` (${SAVES.length})`:''}</button><button class="btn" id="auto">Auto-costruisci</button><button class="btn" id="lands">Suggerisci terre</button><button class="btn" id="copy">Copia lista (Arena)</button><button class="btn" id="forge">Esporta per Forge</button><button class="btn" id="clear" title="Rimette le carte del Mazzo nel Sideboard e azzera le terre base">Svuota</button><button class="btn pri" id="play">Gioca →</button></div>${gihSource()}</div>
   ${builderHTML(S.team?mateHead():'')}`;
   mountBuilder(el,renderDeck);
   $('#save').onclick=()=>{if(!cur){savesModal();return}saveDeck();renderDeck();toast('Salvato: '+cur.name)};
   $('#saves').onclick=savesModal;
-  $('#auto').onclick=()=>{const r=autoBuild(myPool(),GIH_?.w);S.deck=r.uids;S.sb=(S.sb||[]).filter(u=>!r.uids.includes(u));resetZone('deck');S.basics=r.basics;saveS();renderDeck();toast('Mazzo '+r.pair+' costruito: rivedilo tu!')};
+  $('#auto').onclick=()=>{const r=autoBuild(myPool(),GIH_?.w);S.deck=r.uids;resetZone('deck');S.basics=r.basics;saveS();renderDeck();toast('Mazzo '+r.pair+' costruito: rivedilo tu!')};
   $('#lands').onclick=()=>{const nl=S.deck.filter(u=>!isLand(poolByU()[u].c)).length;const ln=S.deck.length-nl;S.basics=suggestBasics(S.deck,myPool(),Math.max(0,40-nl-ln));saveS();renderDeck()};
   $('#clear').onclick=()=>{S.deck=[];resetZone('deck');S.basics={W:0,U:0,B:0,R:0,G:0};saveS();renderDeck()};
   $('#copy').onclick=()=>{const t=deckText();const done=()=>toast('Lista copiata');try{navigator.clipboard.writeText(t).then(done,()=>showText(t))}catch(e){showText(t)}};
@@ -1503,13 +1488,13 @@ function renderDeck(){
 // Tabella delle coppie in cima alla colonna del Pool (issue #25): solo numeri, sulle proprie carte, nell'ordine fisso di PAIRS.
 // Il GIH WR compare quando ci sono i dati (issue #20). Aperta o chiusa non si salva. La coppia evidenziata è il play: della barra.
 let PAIRS_OPEN=false;
-const pairSum=()=>{const p=PAIRS.find(p=>qColors(p.k)===qState(fq()).play);return p?'evidenziata: '+p.n:'giocabili, creature e curva per coppia'};
+const pairSum=()=>{const p=PAIRS.find(p=>qColors(p.k)===qState(fq('side')).play);return p?'evidenziata: '+p.n:'giocabili, creature e curva per coppia'};
 function pairsHTML(){const wr=!!WR,num=(n,cv)=>`<td class="${cv?'cv':''}${n?'':' z'}">${n}</td>`,pip=k=>[...k].map(c=>`<span class="ms ${c}"></span>`).join('');
   return `<details class="pairs"${PAIRS_OPEN?' open':''}><summary><span class="eyebrow">Coppie di colori</span> <span class="muted psum">${pairSum()}</span></summary>
   <div class="ptwrap"><table class="ptab"><thead><tr><th rowspan="2" scope="col">Coppia</th><th rowspan="2" scope="col">Giocabili</th><th rowspan="2" scope="col">Creature</th><th rowspan="2" scope="col">Multicolori</th><th colspan="6" scope="colgroup" class="cvh">Curva</th>${wr?'<th rowspan="2" scope="col">GIH WR medio<br>23 migliori</th>':''}</tr>
   <tr>${['1','2','3','4','5','6+'].map(c=>`<th scope="col" class="cv">${c}</th>`).join('')}</tr></thead>
   <tbody>${pairTable(myPool(),WR).map(r=>`<tr data-pair="${r.k}"><th scope="row"><button class="pbtn" aria-pressed="false">${pip(r.k)}<span>${esc(r.n)}</span></button></th>${num(r.play)}${num(r.cre)}${num(r.multi)}${r.curve.map(n=>num(n,1)).join('')}${wr?`<td>${r.wr==null?'—':r.wr.toFixed(1).replace('.',',')+'%'}</td>`:''}</tr>`).join('')}</tbody></table></div>
-  <p class="muted zhint">Le carte ${S.team?'tue ':''}del Pool, senza terre, che si lanciano con i due colori (un ibrido basta che ne abbia uno). Clic su una riga: scrive <code>play:</code> nella barra del filtro, e nelle Pile si attenuano le carte fuori dalla coppia; un altro clic lo toglie.</p></details>`}
+  <p class="muted zhint">Le carte ${S.team?'tue ':''}del Pool, senza terre, che si lanciano con i due colori (un ibrido basta che ne abbia uno). Clic su una riga: scrive <code>play:</code> nella barra del Sideboard, che mostra solo le carte della coppia; un altro clic lo toglie.</p></details>`}
 // Pool del Compagno, in sola lettura: le sue carte (secondo i passaggi noti) nelle stesse Pile, segnate «Mazzo» se sono nel Mazzo
 // che pubblica nella presence. Le carte non hanno data-u, quindi non si trascinano né si cliccano; ci si trascinano sopra le proprie.
 // Le Pile si ridispongono a ogni disegno con le impostazioni di chi guarda (mlay), che non fanno parte del Mazzo salvato.
@@ -1529,7 +1514,8 @@ function renderMate(){const g=$('#mgrid'),inDeck=mateDeckSet(),byU=poolByU();
 function giveToMate(u){const x=poolByU()[u];if(!x||!giveCard(u)){toast('Non è una tua carta: può dartela solo il Compagno');return}
   syncLay();saveS();closeZoom();renderDeck();toast(`Data al Compagno: ${BY[x.c].n}`+(MATE?'':'. La riceverà appena si collega'))}
 // Trascinamento delle carte tra le Pile, nella scheda Mazzo e nella finestra tra le Partite: in un'altra Pila, in una colonna
-// nuova, nell'altra zona, dalla colonna del Pool o sulla colonna (torna tra le non messe) o, nel Kit di squadra, sul Pool del Compagno. Senza movimento resta un clic e valgono i clic delle carte.
+// nuova, nell'altra zona, dalla colonna del Sideboard, sulla colonna o sul Sideboard in Pile (torna nel Sideboard, nella Pila
+// delle sue chiavi) o, nel Kit di squadra, sul Pool del Compagno. Senza movimento resta un clic e valgono i clic delle carte.
 // Col dito si trascina dopo una pressione lunga (HOLD_MS): un movimento prima è uno scorrimento della pagina.
 const HOLD_MS=300;
 let deckDrag=null,deckDropped=false;
@@ -1555,7 +1541,7 @@ document.addEventListener('pointerup',e=>{if(!deckDrag)return;const d=deckDrag;d
   else if(t?.dataset.zpile!=null){const others=[...t.querySelectorAll('.card')].filter(c=>c!==d.el);
     placeCard(d.u,t.dataset.zone,+t.dataset.col,+t.dataset.row,others.filter(c=>c.getBoundingClientRect().top+8<e.clientY).length)}
   else if(t?.dataset.dz==='mate'){giveToMate(d.u);return}
-  else if(t?.dataset.dz==='pool'&&!d.pool)placeCard(d.u,'pool');
+  else if(t?.dataset.dz==='pool'&&!d.pool||t?.dataset.dz==='side')placeCard(d.u,'side');
   saveS();ZREDRAW()});
 document.addEventListener('pointercancel',()=>{if(deckDrag){const d=deckDrag;deckDrag=null;clearTimeout(d.hold);d.ghost&&d.ghost.remove();d.root.classList.remove('zdrag');ZREDRAW()}});
 // Il clic che segue un trascinamento non deve anche spostare la carta.
@@ -1564,8 +1550,8 @@ document.addEventListener('click',e=>{if(deckDropped){deckDropped=false;e.stopPr
 function deckList(){const byU=poolByU();const out=S.deck.map(u=>byU[u]).filter(Boolean).map(x=>x.v?{c:x.c,v:x.v}:{c:x.c});COLORS.forEach(k=>{for(let i=0;i<S.basics[k];i++)out.push({c:BASIC_ID[k]})});return out}
 function deckText(){const lines=cs=>{const m={};cs.forEach(({c})=>{const n=BY[c].n.split(' // ')[0];const key=BY[c].sg?`${n} (SPG) ${c.slice(1)}`:`${n} (FRA) ${c}`;m[key]=(m[key]||0)+1});return Object.entries(m).map(([k,v])=>v+' '+k).join('\n')};
   const side=sideList();return 'Deck\n'+lines(deckList())+(side.length?'\n\nSideboard\n'+lines(side):'')}
-// Il Sideboard delle regole, per le liste: prima le carte nelle Pile, nel loro ordine, poi le non messe nell'ordine del Pool.
-function sideList(){syncLay();const byU=poolByU(),inP=pileOrder('side'),set=new Set(inP);return [...inP,...sideboard().filter(u=>!set.has(u))].map(u=>byU[u]).filter(Boolean)}
+// Il Sideboard per le liste, nell'ordine delle sue Pile: senza spostamenti a mano è quello della colonna.
+function sideList(){syncLay();const byU=poolByU();return pileOrder('side').map(u=>byU[u]).filter(Boolean)}
 // Colori del Mazzo (dalle carte non terra), per riconoscere i salvataggi a colpo d'occhio.
 function deckColors(pool,deck){const byU=byUid(pool);const k=new Set();deck.forEach(u=>{const x=byU[u];if(x&&!isLand(x.c))[...BY[x.c].c].forEach(c=>k.add(c))});return COLORS.filter(c=>k.has(c))}
 function savesModal(){let armed=null;
@@ -1678,48 +1664,54 @@ function timerNewKit(){if(!TIMER.auto)return false;setTimer(timerStart(timerRese
 function initTimer(){$('#timerchip').onclick=timerModal;paintTimer();setInterval(paintTimer,1000)}
 
 /* 44-querybar.js */
-// Barra del filtro in cima alla colonna del Pool (22-query.js): nella colonna le carte che non corrispondono spariscono, nelle Pile
-// (e nel Pool del Compagno) diventano grigie e si spostano come sempre. I pulsanti e la tabella delle coppie scrivono nella barra.
-// Il filtro vale per il Kit aperto e non si salva: resta tra la scheda Mazzo e la finestra tra le Partite, si azzera ricaricando
-// la pagina o con un Kit nuovo. QFOCUS: la barra aveva il cursore quando il costruttore si è ridisegnato, e lo riprende.
-let FILTRO={seed:null,q:''},QFOCUS=null;
-const fq=()=>{if(FILTRO.seed!==S.seed)FILTRO={seed:S.seed,q:''};return FILTRO.q};
+// Barre del Filtro (22-query.js), una per il Mazzo e una per il Sideboard (ADR 0007): ognuna vale solo per la sua zona. Nella
+// colonna del Sideboard le carte che non corrispondono spariscono, nelle Pile diventano grigie e si spostano come sempre; il Pool
+// del Compagno segue il Filtro del Sideboard. I pulsanti scrivono nella loro barra, la tabella delle coppie in quella del Sideboard.
+// I Filtri valgono per il Kit aperto e non si salvano: restano tra la scheda Mazzo e la finestra tra le Partite, si azzerano
+// ricaricando la pagina o con un Kit nuovo. QFOCUS: la barra che aveva il cursore quando il costruttore si è ridisegnato, e dove.
+let FILTRO={seed:null,deck:'',side:''},QFOCUS=null;
+const fq=(z='side')=>{if(FILTRO.seed!==S.seed)FILTRO={seed:S.seed,deck:'',side:''};return FILTRO[z]};
 const Q_CL={W:'bianco',U:'blu',B:'nero',R:'rosso',G:'verde'};
-function qbarHTML(){const a=document.activeElement;QFOCUS=a?.classList?.contains('qin')?[a.selectionStart,a.selectionEnd]:null;
-  const b=(attr,k,label,html)=>`<button ${attr}="${k}" aria-pressed="false" title="${label}" aria-label="${label}">${html}</button>`;
-  return `<div class="qbar">
-  <div class="qrow"><input type="search" class="qin" value="${esc(fq())}" placeholder="Cerca: flying, t:creature, mv<=2…" aria-label="Filtra le carte (tasto /)" autocomplete="off" spellcheck="false"><button class="btn sm qhelp" title="Come si scrive un filtro" aria-label="Come si scrive un filtro">?</button></div>
+function qbarHTML(z){const a=document.activeElement;QFOCUS=a?.classList?.contains('qin')?{z:a.closest('.qbar')?.dataset.qz,sel:[a.selectionStart,a.selectionEnd]}:null;
+  const b=(attr,k,label,html)=>`<button ${attr}="${k}" aria-pressed="false" title="${label}" aria-label="${label}">${html}</button>`,deck=z==='deck';
+  return `<div class="qbar" data-qz="${z}">
+  <div class="qrow"><input type="search" class="qin" value="${esc(fq(z))}" placeholder="${deck?'Mazzo':'Sideboard'}: flying, t:creature, mv<=2…" aria-label="${deck?'Filtra il Mazzo':'Filtra il Sideboard (tasto /)'}" autocomplete="off" spellcheck="false"><button class="btn sm qhelp" title="Come si scrive un filtro" aria-label="Come si scrive un filtro">?</button></div>
   <div class="qbtns"><span class="seg" role="group" aria-label="Si gioca con questi colori">${COLORS.map(k=>b('data-qc',k,`Si gioca col ${Q_CL[k]}`,`<span class="ms ${k}"></span>`)).join('')}</span><span class="seg" role="group" aria-label="Incolore e multicolore">${b('data-qk','colorless','Incolore','◇')}${b('data-qk','multi','Multicolore','Multi')}</span></div>
   <div class="qbtns"><span class="seg" role="group" aria-label="Valore di mana">${Object.keys(Q_MV).map(k=>b('data-qm',k,`Valore di mana ${k==='1'?'1 o meno':k==='6'?'6 o più':k}`,k==='6'?'6+':k)).join('')}</span><span class="seg" role="group" aria-label="Creature o no">${b('data-qt','cre','Solo creature','Creature')}${b('data-qt','noncre','Solo non creature','Non creature')}</span></div>
-  <div class="qfoot"><label class="ponly"><input type="checkbox" data-po${BLD.only?' checked':''}> solo non messe</label><span class="qcount mono"></span></div>
+  <div class="qfoot"><span class="qcount mono"></span></div>
   <div class="qerr" hidden></div></div>`}
-// Collega la barra scritta da qbarHTML. Scrivendo si ridisegnano solo la colonna e il grigio delle Pile, così il cursore resta.
-function bindQbar(root,redraw){const qb=root.querySelector('.qbar');if(!qb)return;const inp=qb.querySelector('.qin');
-  const refresh=()=>{poolBody(root.querySelector('.pbody'),redraw);markFilter(root)};
-  const set=q=>{FILTRO.q=q;inp.value=q;refresh()};
-  const toggle=(kind,on,src)=>set(qSet(fq(),kind,on?'':src));
-  inp.oninput=()=>{FILTRO.q=inp.value;refresh()};
-  inp.onkeydown=e=>{if(e.key!=='Escape')return;e.stopPropagation();if(inp.value)set('');else inp.blur()};
-  qb.querySelectorAll('[data-qc]').forEach(b=>b.onclick=()=>{const k=b.dataset.qc,p=qState(fq()).play;set(qSet(fq(),'play',qPlaySrc(p.includes(k)?p.replace(k,''):p+k)))});
-  qb.querySelectorAll('[data-qk]').forEach(b=>b.onclick=()=>{const k=b.dataset.qk;toggle(k,qState(fq())[k],'is:'+(k==='multi'?'multicolor':'colorless'))});
-  qb.querySelectorAll('[data-qm]').forEach(b=>b.onclick=()=>{const m=qState(fq()).mv,k=b.dataset.qm;m.has(k)?m.delete(k):m.add(k);set(qSet(fq(),'mv',qMvSrc(m)))});
-  qb.querySelectorAll('[data-qt]').forEach(b=>b.onclick=()=>{const k=b.dataset.qt;toggle('cre',qState(fq()).cre===k,k==='cre'?'t:creature':'-t:creature')});
-  root.querySelectorAll('.pairs tr[data-pair]').forEach(r=>r.onclick=()=>{const k=qColors(r.dataset.pair);toggle('play',qState(fq()).play===k,qPlaySrc(k))});
-  qb.querySelector('.qhelp').onclick=()=>qHelp(q=>{set(q);inp.focus()});
-  if(QFOCUS){inp.focus();inp.setSelectionRange(...QFOCUS);QFOCUS=null}
+// Collega le barre scritte da qbarHTML. Scrivendo si ridisegnano solo la colonna e il grigio delle Pile, così il cursore resta.
+function bindQbar(root,redraw){
+  const set=(z,q)=>{FILTRO[z]=q;const i=root.querySelector(`.qbar[data-qz=${z}] .qin`);if(i)i.value=q;if(z==='side')poolBody(root.querySelector('.pbody'),redraw);markFilter(root)};
+  root.querySelectorAll('.qbar').forEach(qb=>{const z=qb.dataset.qz,inp=qb.querySelector('.qin'),cur=()=>fq(z);
+    const toggle=(kind,on,src)=>set(z,qSet(cur(),kind,on?'':src));
+    inp.oninput=()=>set(z,inp.value);
+    inp.onkeydown=e=>{if(e.key!=='Escape')return;e.stopPropagation();if(inp.value)set(z,'');else inp.blur()};
+    qb.querySelectorAll('[data-qc]').forEach(b=>b.onclick=()=>{const k=b.dataset.qc,p=qState(cur()).play;set(z,qSet(cur(),'play',qPlaySrc(p.includes(k)?p.replace(k,''):p+k)))});
+    qb.querySelectorAll('[data-qk]').forEach(b=>b.onclick=()=>{const k=b.dataset.qk;toggle(k,qState(cur())[k],'is:'+(k==='multi'?'multicolor':'colorless'))});
+    qb.querySelectorAll('[data-qm]').forEach(b=>b.onclick=()=>{const m=qState(cur()).mv,k=b.dataset.qm;m.has(k)?m.delete(k):m.add(k);set(z,qSet(cur(),'mv',qMvSrc(m)))});
+    qb.querySelectorAll('[data-qt]').forEach(b=>b.onclick=()=>{const k=b.dataset.qt;toggle('cre',qState(cur()).cre===k,k==='cre'?'t:creature':'-t:creature')});
+    qb.querySelector('.qhelp').onclick=()=>qHelp(q=>{set(z,q);inp.focus()});
+    if(QFOCUS?.z===z){inp.focus();inp.setSelectionRange(...QFOCUS.sel)}});
+  QFOCUS=null;
+  root.querySelectorAll('.pairs tr[data-pair]').forEach(r=>r.onclick=()=>{const k=qColors(r.dataset.pair),q=fq('side');set('side',qSet(q,'play',qState(q).play===k?'':qPlaySrc(k)))});
   markFilter(root)}
-// Grigio nelle Pile, pulsanti accesi secondo la barra, riga della coppia, conteggi e avvisi sulle parti ignorate.
-function markFilter(root){if(!root?.querySelector)return;const q=fq(),f=compileQuery(q,WR),st=qState(q);
-  root.querySelectorAll('.bmain .card[data-cid]').forEach(c=>c.classList.toggle('dim',!f.test(c.dataset.cid)));
-  const on=(sel,fn)=>root.querySelectorAll(sel).forEach(b=>b.setAttribute('aria-pressed',!!fn(b.dataset)));
-  on('[data-qc]',d=>st.play.includes(d.qc));on('[data-qk]',d=>st[d.qk]);on('[data-qm]',d=>st.mv.has(d.qm));on('[data-qt]',d=>st.cre===d.qt);
-  root.querySelectorAll('.pairs tr[data-pair]').forEach(t=>{const o=qColors(t.dataset.pair)===st.play;t.classList.toggle('on',o);t.querySelector('.pbtn').setAttribute('aria-pressed',o)});
+// Grigio nelle Pile, pulsanti accesi secondo la loro barra, riga della coppia, conteggi e avvisi sulle parti ignorate.
+function markFilter(root){if(!root?.querySelector)return;const F={deck:compileQuery(fq('deck'),WR),side:compileQuery(fq('side'),WR)};
+  const dim=(sel,f)=>root.querySelectorAll(sel).forEach(c=>c.classList.toggle('dim',!f.test(c.dataset.cid)));
+  dim('[data-zw=deck] .card[data-cid]',F.deck);dim('[data-zw=side] .card[data-cid],#mgrid .card[data-cid]',F.side);
+  const byU=poolByU(),mate=root.querySelector('#mgrid');
+  root.querySelectorAll('.qbar').forEach(qb=>{const z=qb.dataset.qz,f=F[z],st=qState(fq(z));
+    const on=(sel,fn)=>qb.querySelectorAll(sel).forEach(b=>b.setAttribute('aria-pressed',!!fn(b.dataset)));
+    on('[data-qc]',d=>st.play.includes(d.qc));on('[data-qk]',d=>st[d.qk]);on('[data-qm]',d=>st.mv.has(d.qm));on('[data-qt]',d=>st.cre===d.qt);
+    const us=zoneUids(S,z),m=z==='side'&&mate,cnt=qb.querySelector('.qcount');
+    cnt.textContent=f.empty?'':`${us.filter(u=>byU[u]&&f.test(byU[u].c)).length} su ${us.length}`+(m?` · Compagno ${mateCards().filter(x=>f.test(x.c)).length}`:'');
+    cnt.title=f.empty?'':(z==='deck'?'Carte del Mazzo che corrispondono':'Carte del Sideboard che corrispondono')+(m?' · nel Pool del Compagno':'');
+    const er=qb.querySelector('.qerr');er.hidden=!f.errs.length;er.textContent=f.errs.length?'Ignorato: '+f.errs.join('; '):''});
+  const play=qState(fq('side')).play;
+  root.querySelectorAll('.pairs tr[data-pair]').forEach(t=>{const o=qColors(t.dataset.pair)===play;t.classList.toggle('on',o);t.querySelector('.pbtn').setAttribute('aria-pressed',o)});
   const ps=root.querySelector('.psum');if(ps)ps.textContent=pairSum();
-  const pf=root.querySelector('.pflt');if(pf)pf.hidden=f.empty;
-  const cnt=root.querySelector('.qcount');if(cnt){const byU=poolByU(),n=us=>us.filter(u=>byU[u]&&f.test(byU[u].c)).length,mate=root.querySelector('#mgrid');
-    cnt.textContent=f.empty?'':`${myPool().filter(x=>f.test(x.c)).length} su ${myPool().length} · M ${n(zoneUids(S,'deck'))} · S ${n(zoneUids(S,'side'))}`+(mate?` · Compagno ${mateCards().filter(x=>f.test(x.c)).length}`:'');
-    cnt.title=f.empty?'':'Corrispondono · nel Mazzo · nelle Pile del Sideboard'+(mate?' · nel Pool del Compagno':'')}
-  const er=root.querySelector('.qerr');if(er){er.hidden=!f.errs.length;er.textContent=f.errs.length?'Ignorato: '+f.errs.join('; '):''}}
+  const pf=root.querySelector('.pflt');if(pf)pf.hidden=F.side.empty}
 
 // Legenda: una finestra sopra tutto, anche sopra quella tra le Partite. Un clic su un esempio lo mette nella barra.
 const Q_HELP=()=>[
@@ -1740,9 +1732,9 @@ const Q_HELP=()=>[
   ['<code>( )</code> parentesi','Raggruppano, di solito con <code>or</code>.',['(mv=2 or mv=3) t:creature']]];
 function qHelp(use){const o=document.createElement('div');o.className='modal qhelpm';
   o.innerHTML=`<div class="mbox" role="dialog" aria-modal="true" aria-labelledby="qht"><div class="mhead"><h3 id="qht">Come si scrive un filtro</h3><button class="btn sm" data-x>Chiudi</button></div>
-  <div class="mbody"><p class="muted" style="margin:0">La sintassi è quella di Scryfall. Nella colonna del Pool restano solo le carte che corrispondono; nelle Pile le altre diventano grigie, ma si spostano come sempre. Clicca un esempio per provarlo.</p>
+  <div class="mbody"><p class="muted" style="margin:0">La sintassi è quella di Scryfall. Ogni barra filtra solo la sua zona, il Mazzo o il Sideboard. Nella colonna del Sideboard restano solo le carte che corrispondono; nelle Pile le altre diventano grigie, ma si spostano come sempre. Clicca un esempio per provarlo.</p>
   <div class="qleg">${Q_HELP().map(([k,d,ex])=>`<div class="qk">${k}</div><div class="qd">${d}${ex.length?`<div class="qex">${ex.map(x=>`<button class="btn sm" data-ex="${esc(x)}"><code>${esc(x)}</code></button>`).join('')}</div>`:''}</div>`).join('')}</div>
-  <p class="muted" style="margin:0;font-size:12px">Tastiera: <kbd>/</kbd> porta alla barra, <kbd>Esc</kbd> la svuota. Una parte scritta male si ignora, con un avviso sotto la barra, e il resto filtra lo stesso.</p></div></div>`;
+  <p class="muted" style="margin:0;font-size:12px">Tastiera: <kbd>/</kbd> porta alla barra del Sideboard, <kbd>Esc</kbd> la svuota. Una parte scritta male si ignora, con un avviso sotto la barra, e il resto filtra lo stesso.</p></div></div>`;
   const key=e=>{if(e.key==='Escape'){e.stopPropagation();e.preventDefault();close()}};
   const close=()=>{o.remove();document.removeEventListener('keydown',key,true)};
   document.addEventListener('keydown',key,true);
@@ -1750,10 +1742,10 @@ function qHelp(use){const o=document.createElement('div');o.className='modal qhe
   o.querySelector('[data-x]').onclick=close;
   o.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>{close();use(b.dataset.ex)});
   document.body.appendChild(o);o.querySelector('[data-x]').focus()}
-// «/» porta alla barra del costruttore in vista: la scheda Mazzo, o la finestra tra le Partite se è aperta.
+// «/» porta alla barra del Sideboard del costruttore in vista: la scheda Mazzo, o la finestra tra le Partite se è aperta.
 document.addEventListener('keydown',e=>{if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey||e.target.closest?.('input,textarea,select,[contenteditable]')||$('.qhelpm'))return;
   const modal=!$('#modal').hidden;if(modal?!$('#modal').contains(BROOT):VIEW!=='deck')return;
-  const inp=BROOT.querySelector?.('.qin');if(!inp?.isConnected)return;e.preventDefault();inp.focus();inp.select()});
+  const inp=BROOT.querySelector?.('.qbar[data-qz=side] .qin');if(!inp?.isConnected)return;e.preventDefault();inp.focus();inp.select()});
 
 /* 50-game.js */
 let G=LS.get('mtg-lab:fra-game-v1',LS.get('fra-game-v1',null))||{mode:'bot',me:null,bot:null,log:[],first:'me'};
