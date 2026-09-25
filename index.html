@@ -121,7 +121,8 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .bmain{min-width:0}
 /* Nella colonna più stretta le Pile si restringono fino al minimo prima di far scorrere la zona. */
 .bld .zgrid{flex:0 1 auto;min-width:min-content}
-.bpool{--ptop:74px;position:sticky;top:var(--ptop);max-height:calc(100vh - var(--ptop) - 48px);overflow:auto;overscroll-behavior:contain;background:var(--felt2);border:1px solid var(--line);border-radius:10px;padding:10px 10px 12px;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+/* --toph: l'altezza vera della testata (41-views.js), che sotto i 1180 px circa va su due righe. */
+.bpool{--ptop:calc(var(--toph,66px) + 8px);position:sticky;top:var(--ptop);max-height:calc(100vh - var(--ptop) - 48px);overflow:auto;overscroll-behavior:contain;background:var(--felt2);border:1px solid var(--line);border-radius:10px;padding:10px 10px 12px;margin-top:12px;display:flex;flex-direction:column;gap:8px}
 .mbody .bpool{--ptop:0px;max-height:calc(88vh - 150px)}
 .zdrag .bpool{border-color:color-mix(in srgb,var(--prism) 55%,var(--line))}
 .bpool.drop-hot{box-shadow:inset 0 0 0 2px var(--prism)}
@@ -186,6 +187,16 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
   .qleg{grid-template-columns:1fr;gap:2px}
   .qleg .qd{margin-bottom:8px}
   .phead .seg{margin-left:0}
+  /* Nella finestra tra le Partite la maniglia del pannello copre il fondo dello schermo: la finestra si ferma sopra, e il
+     bottone per iniziare resta scoperto. */
+  .modal:has(.mbody .bpool){padding-bottom:62px}
+  .modal:has(.mbody .bpool) .mbox{max-height:calc(100vh - 78px);max-height:calc(100dvh - 78px)}
+}
+/* Sul telefono la testata va su più righe (fino a 200 px, e 100 in orizzontale): ferma coprirebbe un terzo dello schermo,
+   quindi nel Mazzo scorre via con la pagina, e la colonna del Sideboard si ferma in cima. */
+@media (max-width:760px),(max-height:500px){
+  body:has(#v-deck:not([hidden])) .top{position:static}
+  .bpool{--ptop:8px}
 }
 .dtool{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding-block:8px 14px;border-bottom:1px solid var(--line)}
 .count{font:600 22px var(--mono)}
@@ -284,11 +295,14 @@ details>summary{cursor:pointer}
 .zwrap.mate .card{cursor:default}
 .zwrap.mate .card.out .face{opacity:.55}
 .zwrap.mate .card.dim .face{opacity:.22}
-/* In una Pila si vede solo la cima di ogni carta: l'etichetta sta in alto a destra, sopra il costo. */
+/* In una Pila si vede solo la cima di ogni carta: le etichette stanno in alto a destra, sopra il costo, e lasciano leggere il
+   nome. Nel Pool del Compagno il GIH WR e «Mazzo»/«Side» stanno insieme in .ctags. */
 .mtag{position:absolute;top:3px;right:3px;font:600 9px var(--mono);letter-spacing:.06em;padding:1px 4px;border-radius:3px;background:var(--prism);color:var(--prism-ink);pointer-events:none}
 .mtag.sb{background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
-.wr{position:absolute;top:3px;left:3px;font:600 9.5px var(--mono);padding:1px 4px;border-radius:3px;background:rgba(12,10,22,.85);color:#f4f0fb;pointer-events:none}
+.wr{position:absolute;top:3px;right:3px;font:600 9.5px var(--mono);padding:1px 4px;border-radius:3px;background:rgba(12,10,22,.85);color:#f4f0fb;pointer-events:none}
 .wr.low{color:#8d86a6;background:rgba(12,10,22,.7)}
+.ctags{position:absolute;top:3px;right:3px;display:flex;gap:3px;pointer-events:none}
+.ctags>*{position:static}
 .gihsrc{flex-basis:100%;margin:0;font-size:12px}
 .gihsrc a{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .lens .lensact{display:flex;gap:8px;cursor:default}
@@ -1419,6 +1433,8 @@ const PV=[['list','Lista'],['grid','Griglia'],['piles','Pile']];
 let BLD=(o=>({view:PV.some(([k])=>k===o?.view)?o.view:'list'}))(LS.get('mtg-lab:costruttore-v1',null));
 const saveBld=()=>LS.set('mtg-lab:costruttore-v1',BLD);
 let POOL_OPEN=false,BROOT=document;
+// La colonna del Sideboard si ferma sotto la testata, che va a capo quando la finestra si stringe: --toph ne segue l'altezza.
+new ResizeObserver(()=>document.documentElement.style.setProperty('--toph',$('.top').offsetHeight+'px')).observe($('.top'));
 const viewSeg=()=>`<span class="seg pview" role="group" aria-label="Vista del Sideboard">${PV.map(([k,l])=>`<button data-pv="${k}" aria-pressed="${BLD.view===k}">${l}</button>`).join('')}</span>`;
 const sideTitle=()=>`Sideboard · ${sideboard().length} carte${S.team?' tue':''}`;
 // extra: sotto le Pile, nella scheda Mazzo il Pool del Compagno.
@@ -1502,14 +1518,17 @@ const mateCards=()=>S.pool.filter((x,i)=>ownerAt(S,i)!==S.seat);
 const mateSet=()=>{const m=S.mlay;return m&&isGrp(m.c)&&isGrp(m.r)?m:(S.mlay={c:'col',r:'rr',o:'cmc'})};
 function mateHead(){const n=mateCards().length,inDeck=MATE?mateDeckSet().size:0;
   return `<section class="zsec">${zoneHead('mate',`Pool del ${seatName(1-S.seat)}${MATE?.nm?' · '+esc(MATE.nm):''} · ${n} carte${MATE?`, ${inDeck} nel suo Mazzo`:''} · sola lettura`,mateSet())}
-  <div class="zwrap mate" id="mgrid" data-dz="mate"></div><p class="muted zhint">Trascina qui una tua carta per darla al Compagno.</p></section>`}
+  <div class="zwrap mate" id="mgrid" data-dz="mate"></div><p class="muted zhint">Trascina qui una tua carta per darla al Compagno.${MATE&&WR?' M e S: nel suo Mazzo e nel suo Sideboard.':''}</p></section>`}
 // Indici del Mazzo del Compagno, solo tra le carte che risultano sue.
 function mateDeckSet(){return new Set((MATE?.d||[]).filter(i=>S.pool[i]&&ownerAt(S,i)!==S.seat).map(i=>S.pool[i].u))}
 function renderMate(){const g=$('#mgrid'),inDeck=mateDeckSet(),byU=poolByU();
   if(!MATE){const n=document.createElement('div');n.className='nog';n.style.margin='0';n.textContent=`Il ${seatName(1-S.seat)} non è collegato: apra il codice ${S.seed} e scelga il suo posto. Intanto vedi le sue carte, senza sapere quali ha nel Mazzo; quelle che gli dai le riceverà appena si collega.`;g.appendChild(n)}
   g.appendChild(gridEl('mate',arrangeZone({...mateSet()},mateCards()),u=>{const x=byU[u],d=inDeck.has(u);const w=document.createElement('div');w.className='card'+(MATE&&!d?' out':'');
     setPreviewAttrs(w,x);w.appendChild(faceEl(x,{foil:!!x.f}));addWR(w,x.c);
-    if(MATE){const t=document.createElement('span');t.className='mtag'+(d?'':' sb');t.textContent=d?'Mazzo':'Side';w.appendChild(t)}return w},false));markFilter(BROOT)}
+    // Accanto al GIH WR l'etichetta si accorcia in M o S, per lasciare leggere il nome.
+    if(MATE){const t=document.createElement('span'),wr=w.querySelector('.wr');t.className='mtag'+(d?'':' sb');
+      t.textContent=wr?(d?'M':'S'):(d?'Mazzo':'Side');if(wr)w.title=d?'Nel Mazzo del Compagno':'Nel Sideboard del Compagno';
+      if(wr){const g=document.createElement('span');g.className='ctags';g.append(wr,t);w.appendChild(g)}else w.appendChild(t)}return w},false));markFilter(BROOT)}
 // Dai al Compagno: dal trascinamento sul suo Pool o dal bottone della carta ingrandita.
 function giveToMate(u){const x=poolByU()[u];if(!x||!giveCard(u)){toast('Non è una tua carta: può dartela solo il Compagno');return}
   syncLay();saveS();closeZoom();renderDeck();toast(`Data al Compagno: ${BY[x.c].n}`+(MATE?'':'. La riceverà appena si collega'))}
