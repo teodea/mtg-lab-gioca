@@ -1,4 +1,5 @@
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MTG Lab</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
@@ -16,7 +17,7 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{background:var(--ground);color:var(--text)}
-body{font:14px/1.45 var(--body);padding-inline:16px;padding-block:0 32px;min-height:100%}
+body{font:14px/1.45 var(--body);margin:0;padding-inline:16px;padding-block:0 32px;min-height:100%}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--prism);outline-offset:2px}
@@ -117,7 +118,7 @@ input[type=text],input[type=search],input[type=number],select{background:var(--s
 .bld{display:grid;grid-template-columns:minmax(0,1fr) var(--pw,clamp(270px,24vw,360px));gap:16px;align-items:start}
 .bmain{min-width:0}
 /* Nella colonna più stretta le Pile si restringono fino al minimo prima di far scorrere la zona. */
-.bld .zgrid{flex:0 1 auto}
+.bld .zgrid{flex:0 1 auto;min-width:min-content}
 .bpool{--ptop:74px;position:sticky;top:var(--ptop);max-height:calc(100vh - var(--ptop) - 48px);overflow:auto;overscroll-behavior:contain;background:var(--felt2);border:1px solid var(--line);border-radius:10px;padding:10px 10px 12px;margin-top:12px;display:flex;flex-direction:column;gap:8px}
 .mbody .bpool{--ptop:0px;max-height:calc(88vh - 150px)}
 .zdrag .bpool{border-color:color-mix(in srgb,var(--prism) 55%,var(--line))}
@@ -193,7 +194,9 @@ input[type=text],input[type=search],input[type=number],select{background:var(--s
 .zsec{border-top:1px solid var(--line);padding-top:12px}
 .dtool+.zsec{border-top:0}
 .zhead{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-size:12.5px}
-.zset{display:flex;align-items:center;gap:6px}
+.zset{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+/* Su schermo stretto i pulsanti vanno a capo dentro il gruppo, invece di allargare la pagina. */
+.zset .seg{flex-wrap:wrap;min-width:0}
 .zset .seg button{padding:4px 9px}
 .zhint{font-size:12px;margin:0 0 10px}
 /* Pile: le colonne in orizzontale, le righe una sotto l'altra; in fondo una colonna vuota per crearne una nuova. */
