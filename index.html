@@ -827,13 +827,14 @@ function curveOdds(s,p,t,l,n){const C=(a,b)=>{if(b<0||b>a)return 0;let r=1;for(l
   for(let a=0;a<=Math.min(s,seen);a++)for(let b=0;b<=Math.min(l-s,seen-a);b++){const w=C(s,a)*C(l-s,b)*C(n-l,seen-a-b);if(a+b>=t){all+=w;if(a>=p)ok+=w}}
   return all?ok/all:0}
 // Per ogni colore la carta non terra più difficile da lanciare al suo turno con le terre del Mazzo e le basi di basics:
-// {B:{card:'123',turn:2,odds:.63}}.
+// {B:{card:'123',turn:2,odds:.63}}. Il turno è il valore di mana, con X=1 per le carte con X (Guiding Hydra {X}{W} al turno 2).
+const castTurn=c=>Math.max(1,Math.round(BY[c].v||0)+((BY[c].f[0].m||'').match(/\{X\}/g)||[]).length);
 function castOdds(uids,pool,basics={}){
   const byU=byUid(pool),cards=uids.map(u=>byU[u]).filter(Boolean),src=landSources(uids,pool,basics);
   const lands=cards.filter(x=>isLand(x.c)).length+COLORS.reduce((a,k)=>a+(basics[k]||0),0),n=cards.length+COLORS.reduce((a,k)=>a+(basics[k]||0),0);
   const spells=cards.filter(x=>!isLand(x.c)).map(x=>x.c);
   const cols=new Set(spells.flatMap(c=>((BY[c].f[0].m||'').match(/\{[WUBRG]\}/g)||[]).map(s=>s[1])));const r={};
-  spells.forEach(c=>{const p=costPips(c,cols);Object.keys(p).forEach(k=>{const turn=Math.max(1,Math.round(BY[c].v||0)),odds=curveOdds(src[k],p[k],turn,lands,n);
+  spells.forEach(c=>{const p=costPips(c,cols);Object.keys(p).forEach(k=>{const turn=castTurn(c),odds=curveOdds(src[k],p[k],turn,lands,n);
     if(!r[k]||odds<r[k].odds)r[k]={card:c,turn,odds}})});
   return r}
 // Le fonti di ogni colore tra le terre del Mazzo (una doppia conta per entrambi i colori), più le terre base di basics.
@@ -1398,14 +1399,16 @@ function pilesEl(name,click){const byU=poolByU();return gridEl(name,syncLay()[na
 // Il clic su una carta la manda nell'altra zona, nella Pila delle sue chiavi.
 const pileClick=(name,redraw)=>x=>{placeCard(x.u,name==='deck'?'side':'deck');saveS();redraw()};
 // I contatori delle terre base. Sotto ognuno la carta di quel colore più difficile da lanciare al suo turno e con che probabilità (castOdds);
-// nel title le fonti che ha e quelle che chiede la tabella di Karsten (sourcesNeeded). È un dato, non un consiglio. zoom: un clic sul contatore mostra la terra.
+// nel title la stessa carta, poi le fonti che ha e quelle che chiede la tabella di Karsten (sourcesNeeded). È un dato, non un consiglio. zoom: un clic sul contatore mostra la terra.
 function basicsEl(redraw,zoom){const bs=document.createElement('div');bs.className='basics';const need=sourcesNeeded(S.deck,S.pool),have=landSources(S.deck,S.pool,S.basics),odds=castOdds(S.deck,S.pool,S.basics);
   COLORS.forEach(k=>{const r=document.createElement('div');r.className='bstep';if(zoom)r.dataset.cid=BASIC_ID[k];const n=need[k];
-    const why=n&&`Hai ${have[k]} fonti di questo colore, terre non base comprese; ne servono ${n.need}. `+
-      `${BY[n.card].n} (${BY[n.card].f[0].m}) ne chiede ${n.need}`+(n.splash?': è uno splash (3 carte o meno con un simbolo), soglia di Drifter.':' secondo la tabella di Karsten per 40 carte.');
-    const o=odds[k];
+    const o=odds[k],cn=c=>`${BY[c].n} (${BY[c].f[0].m})`;
+    // Prima la carta della scritta, poi quella che fissa la soglia di Karsten: spesso sono due carte diverse.
+    const why=o&&`${cn(o.card)}: ${Math.round(o.odds*100)}% di avere le fonti al turno ${o.turn}; è la carta di questo colore più difficile da lanciare in tempo.`+
+      (n?` Hai ${have[k]} fonti di questo colore, terre non base comprese; `+(n.card===o.card?'':cn(n.card)+' ')+`ne chiede ${n.need}`+
+        (n.splash?': è uno splash (3 carte o meno con un simbolo), soglia di Drifter.':' secondo la tabella di Karsten per 40 carte.'):'');
     r.innerHTML=`<button aria-label="Meno ${BASIC_NAME[k]}">−</button><span><span class="ms ${k}"></span> <b class="mono">${S.basics[k]}</b></span><button aria-label="Più ${BASIC_NAME[k]}">+</button>`+
-      (o?`<span class="bsrc${o.odds<.85?' short':''}" title="${esc(why||'')}"><span><b>${Math.round(o.odds*100)}%</b> al turno ${o.turn}</span><span class="bcard">${esc(BY[o.card].n)}</span></span>`:'');
+      (o?`<span class="bsrc${o.odds<.85?' short':''}" title="${esc(why)}"><span><b>${Math.round(o.odds*100)}%</b> al turno ${o.turn}</span><span class="bcard">${esc(BY[o.card].n)}</span></span>`:'');
     const [m,,p]=r.children;m.onclick=()=>{S.basics[k]=Math.max(0,S.basics[k]-1);saveS();redraw()};p.onclick=()=>{S.basics[k]++;saveS();redraw()};bs.appendChild(r)});
   return bs}
 // Chi ridisegna dopo un trascinamento tra le Pile: la scheda Mazzo o la finestra tra le Partite.
