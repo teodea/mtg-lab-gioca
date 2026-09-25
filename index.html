@@ -214,15 +214,17 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .zgrid .card.drag-src{opacity:.3}
 .zgrid .card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .zgrid .card.held{transform:scale(1.04);filter:drop-shadow(0 6px 12px rgba(0,0,0,.5))}
-.basicsbox{flex:none;width:calc(120px*var(--cs))}
 .col h4{margin:0 0 6px;font:500 11px var(--mono);color:var(--muted);letter-spacing:.06em;display:flex;justify-content:space-between}
 .stack{display:flex;flex-direction:column}
 .stack .card{margin-top:-118%}
 .stack .card:first-child{margin-top:0}
 .stack .card:hover{z-index:2;transform:translateY(-4px)}
 .card{position:relative;cursor:pointer;transition:transform .12s}
-.basics{display:flex;flex-direction:column;gap:6px;margin-top:8px}
-.bstep{display:flex;flex-wrap:wrap;align-items:center;gap:4px;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:3px 5px}
+/* Le terre base nella testata del Mazzo, dopo le scorciatoie: un contatore accanto all'altro. */
+.basics{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px}
+.zbasics{align-items:flex-start}
+.zbasics>.muted{padding-top:5px}
+.bstep{display:flex;flex-wrap:wrap;align-items:center;gap:4px;justify-content:space-between;width:112px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:3px 5px}
 .bstep button{background:none;border:0;width:22px;height:22px;border-radius:4px;color:var(--muted)}
 .bstep button:hover{background:var(--surface2);color:var(--text)}
 .bsrc{flex-basis:100%;text-align:center;font-size:10.5px;line-height:1.3;color:var(--muted);cursor:help}
@@ -1373,7 +1375,7 @@ const ZONE_NAME={deck:'Mazzo',side:'Sideboard',mate:'Pool del Compagno'};
 // scegliendo un criterio, anche quello di prima, la zona si ridispone da capo.
 const zoneSeg=(name,lbl,attr,opts,val,perso)=>`<span class="zset"><span class="muted">${lbl}</span><span class="seg" role="group" aria-label="${lbl}: ${ZONE_NAME[name]}">${opts.map(([k,l])=>`<button data-zone="${name}" ${attr}="${k}" aria-pressed="${!perso&&val===k}">${l}</button>`).join('')}${perso?'<button aria-pressed="true" aria-disabled="true" title="Hai messo a mano delle carte fuori dalla loro Pila: scegli un criterio per ridisporle">Personalizzato</button>':''}</span></span>`;
 // L'ordine si sceglie solo quando ce n'è più d'uno: il GIH WR compare quando arrivano i dati (issue #20).
-// tail: in fondo alla testata (la vista del Sideboard).
+// tail: in fondo alla testata (le terre base del Mazzo, la vista del Sideboard).
 function zoneHead(name,title,z=S.lay[name],{tail=''}={}){const ords=Object.keys(ORDERS).filter(okOrder);
   return `<div class="zhead"><span class="eyebrow">${title}</span>${zoneSeg(name,'Colonne','data-zc',COL_GROUPS.map(k=>[k,GROUPS[k].l]),z.c,z.cm)+zoneSeg(name,'Righe','data-zr',ROW_GROUPS.map(k=>[k,GROUPS[k].l]),z.r,z.rm)+(ords.length>1?zoneSeg(name,'Ordine','data-zo',ords.map(k=>[k,ORDERS[k].l]),okOrder(z.o)?z.o:'cmc'):'')}${tail}</div>`}
 // Una zona stesa in Pile: le colonne in orizzontale e le righe una sotto l'altra. Se edit, le Pile accettano le carte trascinate
@@ -1423,7 +1425,7 @@ const sideTitle=()=>`Sideboard · ${sideboard().length} carte${S.team?' tue':''}
 // extra: sotto le Pile, nella scheda Mazzo il Pool del Compagno.
 function builderHTML(extra=''){const st=deckStats(),piles=BLD.view==='piles';
   return `<div class="bld${piles?' spile':''}"><div class="bmain">
-  <section class="zsec">${zoneHead('deck',`Mazzo · ${S.deck.length} carte e ${st.basics} terre base · clic → Sideboard`)}${qbarHTML('deck')}<div class="zwrap" data-zw="deck"></div>
+  <section class="zsec">${zoneHead('deck',`Mazzo · ${S.deck.length} carte e ${st.basics} terre base · clic → Sideboard`,S.lay.deck,{tail:'<span class="zset zbasics"><span class="muted">Terre base</span></span>'})}${qbarHTML('deck')}<div class="zwrap" data-zw="deck"></div>
   <p class="muted zhint">Trascina le carte tra il Sideboard e le Pile, da una Pila all'altra o in una colonna o una riga nuova; per togliere una carta dal Mazzo trascinala sul Sideboard. Le scorciatoie ridispongono la zona da capo.</p></section>
   ${piles?`<section class="zsec" data-dz="side">${zoneHead('side',sideTitle()+' · clic → Mazzo',S.lay.side,{tail:viewSeg()})}${qbarHTML('side')}${pairsHTML()}<div class="zwrap" data-zw="side"></div></section>`:''}
   ${extra}</div>
@@ -1454,10 +1456,9 @@ function poolBody(body,redraw){if(!body)return;const keys=GROUPS.col.keys,byU=po
       r.onpointerenter=e=>{if(e.pointerType==='mouse'&&!deckDrag&&r.getBoundingClientRect().left>=270)showZoom(x,r,{width:250})};r.onpointerleave=()=>{if(zoomedOn(r))closeZoom()};
       body.appendChild(r)})})}
 // Monta il costruttore scritto da builderHTML dentro root. redraw: ridisegna chi lo ospita.
-function mountBuilder(root,redraw){const st=deckStats(),q=s=>root.querySelector(s);BROOT=root;
+function mountBuilder(root,redraw){const q=s=>root.querySelector(s);BROOT=root;
   const zd=q('[data-zw=deck]');zd.appendChild(pilesEl('deck',pileClick('deck',redraw)));
-  const basicCol=document.createElement('div');basicCol.className='col basicsbox';basicCol.innerHTML=`<h4><span>Terre base</span><span>${st.basics}</span></h4>`;
-  basicCol.appendChild(basicsEl(redraw,true));zd.appendChild(basicCol);
+  q('.zbasics').appendChild(basicsEl(redraw,true));
   q('[data-zw=side]')?.appendChild(pilesEl('side',pileClick('side',redraw)));
   [['zc','c'],['zr','r'],['zo','o']].forEach(([a,f])=>root.querySelectorAll(`.bmain [data-${a}]`).forEach(b=>b.onclick=()=>{const n=b.dataset.zone;(n==='mate'?mateSet():S.lay[n])[f]=b.dataset[a];if(n!=='mate')resetZone(n);saveS();redraw()}));
   root.querySelectorAll('[data-pv]').forEach(b=>b.onclick=()=>{BLD.view=b.dataset.pv;saveBld();redraw()});
