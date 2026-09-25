@@ -228,9 +228,6 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .bstep button{background:none;border:0;width:22px;height:22px;border-radius:4px;color:var(--muted)}
 .bstep button:hover{background:var(--surface2);color:var(--text)}
 .bsrc{flex-basis:100%;text-align:center;font-size:10.5px;line-height:1.3;color:var(--muted);cursor:help}
-.bsrc span{white-space:nowrap}
-.bsrc.short{color:var(--bad)}
-.bsrc .bcard{display:block;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
 .stats{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12.5px}
 .curve{display:flex;align-items:flex-end;gap:3px;height:34px}
 .curve div{width:14px;background:var(--prism);opacity:.8;border-radius:2px 2px 0 0;min-height:2px;position:relative}
@@ -1397,17 +1394,19 @@ function gridEl(name,z,el,edit){const nc=z.ck.length,nr=z.rk.length;
 function pilesEl(name,click){const byU=poolByU();return gridEl(name,syncLay()[name],u=>byU[u]&&cardEl(byU[u],'',()=>click(byU[u])),true)}
 // Il clic su una carta la manda nell'altra zona, nella Pila delle sue chiavi.
 const pileClick=(name,redraw)=>x=>{placeCard(x.u,name==='deck'?'side':'deck');saveS();redraw()};
-// I contatori delle terre base. Sotto ognuno la carta di quel colore più difficile da lanciare al suo turno e con che probabilità (castOdds);
-// nel title la stessa carta, poi le fonti che ha e quelle che chiede la tabella di Karsten (sourcesNeeded). È un dato, non un consiglio. zoom: un clic sul contatore mostra la terra.
+// I contatori delle terre base. Sotto ognuno i simboli di quel colore nei costi delle carte del Mazzo (un ibrido conta per ognuno dei suoi
+// colori); nel title la carta più difficile da lanciare al suo turno e con che probabilità (castOdds), poi le fonti che ha e quelle che
+// chiede la tabella di Karsten (sourcesNeeded). È un dato, non un consiglio. zoom: un clic sul contatore mostra la terra.
 function basicsEl(redraw,zoom){const bs=document.createElement('div');bs.className='basics';const need=sourcesNeeded(S.deck,S.pool),have=landSources(S.deck,S.pool,S.basics),odds=castOdds(S.deck,S.pool,S.basics);
-  COLORS.forEach(k=>{const r=document.createElement('div');r.className='bstep';if(zoom)r.dataset.cid=BASIC_ID[k];const n=need[k];
+  const byU=poolByU(),costs=S.deck.map(u=>byU[u]).filter(x=>x&&!isLand(x.c)).flatMap(x=>(BY[x.c].f[0].m||'').match(/\{[^}]+\}/g)||[]);
+  COLORS.forEach(k=>{const sym=costs.filter(s=>s.slice(1,-1).split('/').includes(k)).length;const r=document.createElement('div');r.className='bstep';if(zoom)r.dataset.cid=BASIC_ID[k];const n=need[k];
     const o=odds[k],cn=c=>`${BY[c].n} (${BY[c].f[0].m})`;
-    // Prima la carta della scritta, poi quella che fissa la soglia di Karsten: spesso sono due carte diverse.
+    // Prima la carta più difficile da lanciare, poi quella che fissa la soglia di Karsten: spesso sono due carte diverse.
     const why=o&&`${cn(o.card)}: ${Math.round(o.odds*100)}% di avere le fonti al turno ${o.turn}; è la carta di questo colore più difficile da lanciare in tempo.`+
       (n?` Hai ${have[k]} fonti di questo colore, terre non base comprese; `+(n.card===o.card?'':cn(n.card)+' ')+`ne chiede ${n.need}`+
         (n.splash?': è uno splash (3 carte o meno con un simbolo), soglia di Drifter.':' secondo la tabella di Karsten per 40 carte.'):'');
     r.innerHTML=`<button aria-label="Meno ${BASIC_NAME[k]}">−</button><span><span class="ms ${k}"></span> <b class="mono">${S.basics[k]}</b></span><button aria-label="Più ${BASIC_NAME[k]}">+</button>`+
-      (o?`<span class="bsrc${o.odds<.85?' short':''}" title="${esc(why)}"><span><b>${Math.round(o.odds*100)}%</b> al turno ${o.turn}</span><span class="bcard">${esc(BY[o.card].n)}</span></span>`:'');
+      (sym?`<span class="bsrc"${why?` title="${esc(why)}"`:''}><b>${sym}</b> ${sym>1?'simboli':'simbolo'}</span>`:'');
     const [m,,p]=r.children;m.onclick=()=>{S.basics[k]=Math.max(0,S.basics[k]-1);saveS();redraw()};p.onclick=()=>{S.basics[k]++;saveS();redraw()};bs.appendChild(r)});
   return bs}
 // Chi ridisegna dopo un trascinamento tra le Pile: la scheda Mazzo o la finestra tra le Partite.
