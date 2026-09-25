@@ -1108,6 +1108,8 @@ const ordCmp=o=>okOrder(o)?ORDERS[o].cmp:byCost;
 // c e r sono i criteri di colonne e righe, o l'ordine nella Pila; ck e rk le chiavi delle colonne (da sinistra) e delle righe
 // (dall'alto), null per quelle fatte a mano; p[col][row] gli uid della Pila, dall'alto in basso. Le carte che entrano in una
 // zona vanno nella Pila delle loro chiavi, al loro posto nell'ordine; quelle spostate a mano restano dove sono.
+// cm e rm: le colonne (o le righe) sono «Personalizzate», perché il giocatore ha messo una carta in una Pila che per quel
+// criterio non è la sua (issue #28). Scegliere di nuovo un criterio ridispone la zona da capo e le toglie.
 // Predefiniti: il Mazzo per costo, con le creature sopra e le altre carte sotto come in Arena; il Sideboard per colore, come lo si
 // stende al tavolo, con le rare e le mitiche in una riga sotto le comuni e le non comuni.
 const ZONE_DEF={deck:{c:'cmc',r:'rc',o:'cmc'},side:{c:'col',r:'rr',o:'cmc'}};
@@ -1153,7 +1155,8 @@ function placeCard(u,zone,col,row,pos){syncLay();const sb=(S.sb||[]).filter(x=>x
   if(col!=null&&zone!=='pool'){ZONES.forEach(n=>S.lay[n].p.forEach(c=>c.forEach((p,j)=>c[j]=p.filter(x=>x!==u))));const z=S.lay[zone];row=row??0;
     if(col>=z.ck.length){col=z.ck.length;z.ck.push(null);z.p.push(z.rk.map(()=>[]))}
     if(row>=z.rk.length){row=z.rk.length;z.rk.push(null);z.p.forEach(c=>c.push([]))}
-    const p=z.p[col][row];p.splice(pos??p.length,0,u)}
+    const p=z.p[col][row];p.splice(pos??p.length,0,u);
+    const c=byUid(S.pool)[u].c;if(z.ck[col]!==groupKey(z.c,c))z.cm=true;if(z.rk[row]!==groupKey(z.r,c))z.rm=true}
   syncLay()}
 // Stati di prima delle due zone (issue #24): side era il Sideboard scelto a mano, cols e grp le colonne del Mazzo.
 // Le colonne diventano Pile su una riga sola; le carte del vecchio Sideboard una Pila a parte, la prima a sinistra.
@@ -1174,7 +1177,8 @@ function cleanLay(lay,us){const out={};if(!lay||typeof lay!=='object')return out
   for(const n of ZONES){const z=lay[n];if(!z||!isGrp(z.c)||!isGrp(z.r)||!Array.isArray(z.ck)||!Array.isArray(z.rk)||!Array.isArray(z.p))continue;
     const key=(g,k)=>GROUPS[g].keys.includes(k)?k:null,ck=z.ck.slice(0,80).map(k=>key(z.c,k)),rk=z.rk.slice(0,20).map(k=>key(z.r,k));
     const pile=(i,j)=>Array.isArray(z.p[i])&&Array.isArray(z.p[i][j])?z.p[i][j].filter(u=>us.has(u)):[];
-    out[n]={c:z.c,r:z.r,o:Object.hasOwn(ORDERS,z.o)?z.o:'cmc',ck,rk,p:ck.map((_,i)=>rk.map((_,j)=>pile(i,j)))}}
+    out[n]={c:z.c,r:z.r,o:Object.hasOwn(ORDERS,z.o)?z.o:'cmc',ck,rk,p:ck.map((_,i)=>rk.map((_,j)=>pile(i,j)))};
+    if(z.cm===true)out[n].cm=true;if(z.rm===true)out[n].rm=true}
   return out}
 // Two-Headed Giant: team = 8 o 12 Buste (0 per il Kit individuale), seat = il posto scelto, 0 per il Compagno A e 1 per il B.
 // opened conta le Buste aperte tra le proprie; viewB è l'indice della Busta guardata, tra tutte quelle del Kit.
@@ -1374,11 +1378,13 @@ const gihSource=()=>GIH_?`<p class="gihsrc muted">GIH WR sulle carte: <a href="h
 // Criteri delle scorciatoie: ognuno ridispone da capo la sua zona.
 const COL_GROUPS=['col','cmc','type','rar','cre','none'],ROW_GROUPS=['none','rr','rc','cmc'];
 const ZONE_NAME={deck:'Mazzo',side:'Sideboard',mate:'Pool del Compagno'};
-const zoneSeg=(name,lbl,attr,opts,val)=>`<span class="zset"><span class="muted">${lbl}</span><span class="seg" role="group" aria-label="${lbl}: ${ZONE_NAME[name]}">${opts.map(([k,l])=>`<button data-zone="${name}" ${attr}="${k}" aria-pressed="${val===k}">${l}</button>`).join('')}</span></span>`;
+// perso: le carte messe a mano fuori dalla loro Pila (cm, rm). Nessun criterio è più quello vero e «Personalizzato» lo dice;
+// scegliendo un criterio, anche quello di prima, la zona si ridispone da capo.
+const zoneSeg=(name,lbl,attr,opts,val,perso)=>`<span class="zset"><span class="muted">${lbl}</span><span class="seg" role="group" aria-label="${lbl}: ${ZONE_NAME[name]}">${opts.map(([k,l])=>`<button data-zone="${name}" ${attr}="${k}" aria-pressed="${!perso&&val===k}">${l}</button>`).join('')}${perso?'<button aria-pressed="true" aria-disabled="true" title="Hai messo a mano delle carte fuori dalla loro Pila: scegli un criterio per ridisporle">Personalizzato</button>':''}</span></span>`;
 // L'ordine si sceglie solo quando ce n'è più d'uno: il GIH WR compare quando arrivano i dati (issue #20).
 // lead: prima del titolo (il bottone che chiude il Sideboard); segs=false toglie le scorciatoie, a zona chiusa.
 function zoneHead(name,title,z=S.lay[name],{lead='',segs=true}={}){const ords=Object.keys(ORDERS).filter(okOrder);
-  return `<div class="zhead">${lead}<span class="eyebrow">${title}</span>${segs?zoneSeg(name,'Colonne','data-zc',COL_GROUPS.map(k=>[k,GROUPS[k].l]),z.c)+zoneSeg(name,'Righe','data-zr',ROW_GROUPS.map(k=>[k,GROUPS[k].l]),z.r)+(ords.length>1?zoneSeg(name,'Ordine','data-zo',ords.map(k=>[k,ORDERS[k].l]),okOrder(z.o)?z.o:'cmc'):''):''}</div>`}
+  return `<div class="zhead">${lead}<span class="eyebrow">${title}</span>${segs?zoneSeg(name,'Colonne','data-zc',COL_GROUPS.map(k=>[k,GROUPS[k].l]),z.c,z.cm)+zoneSeg(name,'Righe','data-zr',ROW_GROUPS.map(k=>[k,GROUPS[k].l]),z.r,z.rm)+(ords.length>1?zoneSeg(name,'Ordine','data-zo',ords.map(k=>[k,ORDERS[k].l]),okOrder(z.o)?z.o:'cmc'):''):''}</div>`}
 // Una zona stesa in Pile: le colonne in orizzontale e le righe una sotto l'altra. Se edit, le Pile accettano le carte trascinate
 // e in fondo ci sono una colonna vuota a destra e una riga vuota sotto dove crearne di nuove. el(u): la carta da mostrare.
 function gridEl(name,z,el,edit){const nc=z.ck.length,nr=z.rk.length;
