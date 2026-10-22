@@ -387,7 +387,7 @@ body.targeting .zone .bf .bc:hover .face{outline:3px solid var(--bad);outline-of
 .nog{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px;margin-top:10px}
 
 /* overlay pieces */
-.ctx{position:fixed;z-index:90;background:var(--surface2);border:1px solid var(--faint);border-radius:8px;padding:4px;min-width:180px;box-shadow:0 12px 30px rgba(0,0,0,.55);display:flex;flex-direction:column}
+.ctx{position:fixed;z-index:105;background:var(--surface2);border:1px solid var(--faint);border-radius:8px;padding:4px;min-width:180px;box-shadow:0 12px 30px rgba(0,0,0,.55);display:flex;flex-direction:column}
 .ctx button{background:none;border:0;text-align:left;padding:6px 10px;border-radius:5px;display:flex;justify-content:space-between;gap:16px}
 .ctx button:hover{background:var(--surface)}
 .ctx button kbd{font:500 10px var(--mono);color:var(--faint)}
@@ -1707,6 +1707,9 @@ function savesModal(){let armed=null;const openH=new Set();
       const loadKey='load'+s.id,delKey='del'+s.id;
       if(s.id!==S.saveId||deckDirty())B(armed===loadKey?'Sostituisci il Mazzo attuale?':'Carica',()=>{if(dirty&&armed!==loadKey){armed=loadKey;draw_();return}const other=s.seed!==S.seed;loadDeck(s.id);if(other){resetGame();commit()}closeModal();renderAll();toast('Caricato: '+s.name+(other?' · il Match riparte da zero':''))},armed===loadKey?'warm':'');
       B('Esporta',()=>{const code=exportDeck(s.id);try{navigator.clipboard.writeText(code).then(()=>toast('Codice copiato'),()=>{})}catch(e){}$('#svcode').value=code;m.querySelector('details').open=true;$('#svcode').select()});
+      // Confronto con un'altra versione dello stesso Pool (issue #43).
+      const vs=versionsOf(s.id);if(vs.length)B('Confronta…',e=>{const r=e.target.getBoundingClientRect();
+        openMenu(r.left,r.bottom+4,vs.map(v=>[`con «${v.name}»`,()=>compareModal(compareSaves(s.id,v.id),s.name,v.name,s.pool,[['Record',saveRecord(s.id),saveRecord(v.id)]])]))});
       const hs=histOf(s.id);if(hs.length)B(`Storico (${hs.length})`,()=>{openH.has(s.id)?openH.delete(s.id):openH.add(s.id);draw_()});
       B(armed===delKey?'Elimina davvero':'Elimina',()=>{if(armed!==delKey){armed=delKey;draw_();return}deleteDeck(s.id);armed=null;draw_()},armed===delKey?'warm':'');
       if(openH.has(s.id))r.appendChild(histList(hs,draw_));
@@ -2173,6 +2176,15 @@ function compareDecks(pool,a,b){const byU=byUid(pool),ok=d=>[...new Set(d.deck)]
     r.n=us.length+COLORS.reduce((s,k)=>s+r.basics[k],0);return r};
   return{both:A.filter(u=>inB.has(u)),onlyA:A.filter(u=>!inB.has(u)),onlyB:B.filter(u=>!inA.has(u)),a:stats(A,a.basics),b:stats(B,b.basics)}}
 
+// Confronto tra due versioni salvate del Mazzo (issue #43). Sono versioni le altre salvate dello stesso Pool: stesso codice del
+// Kit e, nel Kit di squadra, stesso posto.
+const versionsOf=id=>{const s=findSave(id);return s?SAVES.filter(x=>x.id!==id&&x.seed===s.seed&&(x.team||0)===(s.team||0)&&(x.seat||0)===(s.seat||0)):[]};
+function compareSaves(ia,ib){const a=findSave(ia),b=findSave(ib);return a&&b&&a.seed===b.seed?compareDecks(a.pool,a,b):null}
+// Il record di un Mazzo salvato: dallo storico dei Match (issue #42) o, se non c'è, dal bilancio del salvataggio.
+function saveRecord(id){const h=histOf(id),s=findSave(id),wld=(w,l,d)=>`${w}-${l}${d?'-'+d:''}`,cnt=(xs,k)=>xs.filter(x=>x===k).length;
+  if(h.length){const ms=h.map(e=>e.res),gs=h.flatMap(e=>e.games.map(g=>g.r));return `Match ${wld(cnt(ms,'W'),cnt(ms,'L'),cnt(ms,'D'))} · Partite ${wld(cnt(gs,'W'),cnt(gs,'L'),cnt(gs,'D'))}`}
+  const t=s?.st;return t&&t.mw+t.ml+(t.md||0)?`Match ${wld(t.mw,t.ml,t.md||0)} · Partite ${wld(t.gw,t.gl,0)}`:'Nessun Match'}
+
 function dupStart(){if(S.team||S.dup)return false;S.dup={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),seed:S.seed,phase:'run',snap:null,opp:{done:false,deck:null}};saveS();return true}
 function dupFinish(){const d=S.dup;if(!d||d.phase==='done')return;d.phase='done';d.snap={deck:[...S.deck],basics:{...S.basics}};saveS()}
 // Si torna a costruire solo finché l'altro non ha finito: dopo, il confronto è già suo.
@@ -2216,7 +2228,8 @@ function paintDup(){const b=$('#dupbox');if(!b)return;const h=dupBoxHTML();b.hid
 const dupTimer=()=>{const now=Date.now();setTimer(timerStart(timerReset(timerSetDur(TIMER,45,now)),now))};
 function dupReact(r){if(!r)return;if(r==='started'){dupTimer();toast(`${oppName()} ha avviato un Duplicate Sealed: il timer di costruzione parte`)}publish();paintDup()}
 // Il confronto di due Mazzi (r: compareDecks), na e nb i loro nomi.
-function compareModal(r,na,nb){if(!r)return;openModal(`Confronto dei Mazzi: ${na} e ${nb}`,m=>{m.parentElement.classList.add('wide');const byU=byUid(S.pool);
+// pool: il Pool dei due Mazzi (quello attuale per il Duplicate); extra: righe in più della tabella, [etichetta, a, b].
+function compareModal(r,na,nb,pool=S.pool,extra=[]){if(!r)return;openModal(`Confronto dei Mazzi: ${na} e ${nb}`,m=>{m.parentElement.classList.add('wide');const byU=byUid(pool);
   const list=us=>us.map(u=>byU[u]).sort(byCost).map(x=>`<div class="hit" data-cid="${x.c}"${x.v?` data-v="${x.v}"`:''}><i class="rar ${BY[x.c].r}"></i><span class="n">${esc(BY[x.c].n)}</span><span>${mana(BY[x.c].f[0].m||'')}</span></div>`).join('')||'<span class="muted">Nessuna</span>';
   const col=(t,us)=>`<div class="sumbox"><h3>${esc(t)} (${us.length})</h3><div class="hits">${list(us)}</div></div>`;
   const row=(l,f)=>`<tr><th>${l}</th><td>${f(r.a)}</td><td>${f(r.b)}</td></tr>`;
@@ -2224,7 +2237,8 @@ function compareModal(r,na,nb){if(!r)return;openModal(`Confronto dei Mazzi: ${na
   m.innerHTML=`<div class="cmpcols">${col('Solo '+na,r.onlyA)}${col('In comune',r.both)}${col('Solo '+nb,r.onlyB)}</div>
     <table class="cmptab"><tr><th></th><th>${esc(na)}</th><th>${esc(nb)}</th></tr>
     ${row('Carte',s=>s.n)}${row('Creature',s=>s.cre)}${row('Altre magie',s=>s.non)}${row('Terre non base',s=>s.lands)}${row('Terre base',basics)}
-    ${row('Colori',s=>s.colors.map(k=>`<span class="ms ${k}"></span>`).join('')||'–')}${row('Curva 1-2-3-4-5-6+',s=>`<span class="mono">${s.curve.join(' · ')}</span>`)}</table>`})}
+    ${row('Colori',s=>s.colors.map(k=>`<span class="ms ${k}"></span>`).join('')||'–')}${row('Curva 1-2-3-4-5-6+',s=>`<span class="mono">${s.curve.join(' · ')}</span>`)}
+    ${extra.map(([l,x,y])=>`<tr><th>${esc(l)}</th><td>${esc(x)}</td><td>${esc(y)}</td></tr>`).join('')}</table>`})}
 
 /* 60-bot.js */
 function landsOf(p){return p.bf.filter(o=>o.c!=='x'&&isLand(o.c)&&!o.tp)}
