@@ -1895,7 +1895,7 @@ function startGame(first,fmt){
   const list=deckList();if(!list.length){toast('Il Mazzo è vuoto: costruiscilo prima');go('deck');return}
   const match=G.match;if(mScore().over){match.res='';match.bot=null}
   if(!match.res&&fmt){match.hg=fmt==='hg'?1:0;match.bo=match.hg?1:fmt}
-  const coin=!first;const nick=S.nick||'Tu';G={mode:G.mode||'bot',log:[],first:first||(Math.random()<.5?'me':'bot'),match,tally:G.tally,me:mkPlayer(nick,list),bot:null,seed:S.seed};
+  const coin=!first;const nick=S.nick||'Tu';G={mode:G.mode||'bot',gid:Date.now().toString(36),log:[],first:first||(Math.random()<.5?'me':'bot'),match,tally:G.tally,me:mkPlayer(nick,list),bot:null,seed:S.seed};
   const gn=G.gn=match.res.length+1;
   log(null,`Partita ${gn} del Match ${match.hg?'Two-Headed Giant (una Partita, 30 vite, primo mulligan gratis)':'al meglio di '+match.bo}${match.res?' ('+scoreText()+')':''}. Mazzo di ${list.length} carte${list.length<40?' (meno di 40!)':''}.`);
   const who1=G.mode==='bot'?(G.first==='me'?'Inizi tu':'Inizia il bot'):(G.first==='me'?'Vai per primo':'Vai per secondo');
@@ -1913,7 +1913,27 @@ function recordResult(r){const m=G.match;if(mScore().over){toast('Il Match è gi
   log(G.me,`${{W:'Vince',L:'Perde',D:'Pareggia'}[r]} la Partita ${m.res.length}. Match ${scoreText()}${s.over?(s.won?': <b>Match vinto!</b>':': Match perso'):''}`);commit()}
 function undoResult(){const m=G.match;if(!m.res)return;countMatch(m.res,-1);m.res=m.res.slice(0,-1);G.gn=Math.min(G.gn,m.res.length+1);log(G.me,`Annulla l'ultimo risultato. Match ${scoreText()}`);commit()}
 function newMatch(){G.match={res:'',bo:G.match.bo,hg:G.match.hg};G.gn=0;tableLog('Nuovo Match: punteggio azzerato.');commit()}
-let saveT;function commit(){clearTimeout(saveT);saveT=setTimeout(()=>LS.set('mtg-lab:fra-game-v1',G),250);if(!drag)renderTable();publish()}
+// Annulla (issue #37): commit() tiene l'istantanea dei giocatori di prima di ogni azione che li cambia, fino a UNDO_MAX, solo per la
+// Partita in corso (key: gid e numero della Partita). Contro il Bot ci sono anche le sue carte, che muovi tu. last è lo stato dopo
+// l'ultimo commit, mark l'ultima riga del Registro di allora: le righe nuove danno il nome all'azione. merge: il prossimo cambio
+// si unisce all'azione di prima, così il turno del Bot con il suo combattimento si annulla in una volta.
+// La pila sta in memoria: un ricaricamento la svuota.
+const UNDO_MAX=20;let UNDO={key:null,last:null,mark:null,stack:[],merge:false};
+const undoSnap=()=>JSON.stringify({me:G.me,bot:G.bot});
+const undoKey=()=>G.me?G.gid+'|'+G.gn:null;
+const plainTx=t=>String(t).replace(/<[^>]*>/g,'');
+function undoName(){const i=G.log.lastIndexOf(UNDO.mark),fresh=G.log.slice(i+1);const l=fresh.find(x=>x.w!=='sys')||fresh[0];return l?plainTx(l.tx):'ultima azione'}
+function undoTrack(){const k=undoKey(),now=undoSnap();
+  if(k!==UNDO.key){UNDO={key:k,last:now,mark:G.log.at(-1),stack:[],merge:false};return}
+  if(now===UNDO.last)return;
+  if(UNDO.merge&&UNDO.stack.length)UNDO.merge=false;else{UNDO.stack.push({st:UNDO.last,name:undoName()});if(UNDO.stack.length>UNDO_MAX)UNDO.stack.shift()}
+  UNDO.last=now;UNDO.mark=G.log.at(-1)}
+const undoCount=()=>undoKey()===UNDO.key?UNDO.stack.length:0;
+const undoMerge=on=>{UNDO.merge=!!on};
+// Torna allo stato di prima dell'ultima azione; il nome dell'azione, o null se non c'è niente da annullare.
+function undo(){if(!undoCount())return null;const a=UNDO.stack.pop(),st=JSON.parse(a.st);G.me=st.me;G.bot=st.bot;
+  log(G.me,'Annulla: '+esc(a.name));UNDO.last=undoSnap();UNDO.mark=G.log.at(-1);UNDO.merge=false;commit();return a.name}
+let saveT;function commit(){undoTrack();clearTimeout(saveT);saveT=setTimeout(()=>LS.set('mtg-lab:fra-game-v1',G),250);if(!drag)renderTable();publish()}
 
 /* 60-bot.js */
 function landsOf(p){return p.bf.filter(o=>o.c!=='x'&&isLand(o.c)&&!o.tp)}
@@ -1937,7 +1957,9 @@ function botTurn(){
   const mine=G.me.bf.filter(o=>isCreature(o)&&!o.tp);const maxP=Math.max(0,...mine.map(pow));const flyers=mine.some(o=>kw(o,'Flying')||kw(o,'Reach'));
   const aggro=b.life>=G.me.life+6;
   const atk=b.bf.filter(o=>isCreature(o)&&!o.tp&&!o.sick&&pow(o)>0&&!/Defender/.test(face0(o).o||'')).filter(o=>aggro||!mine.length||tou(o)>maxP||(kw(o,'Flying')&&!flyers)||pow(o)>=G.me.life);
-  if(atk.length){atk.forEach(o=>{o.atk=true;if(!kw(o,'Vigilance'))o.tp=true});log(b,`Attacca con ${atk.map(o=>`<b>${esc(cname(o))}</b> (${pow(o)}/${tou(o)})`).join(', ')} — ${atk.reduce((a,o)=>a+pow(o),0)} danni potenziali`);commit();blockModal(atk)}
+  if(atk.length){atk.forEach(o=>{o.atk=true;if(!kw(o,'Vigilance'))o.tp=true});log(b,`Attacca con ${atk.map(o=>`<b>${esc(cname(o))}</b> (${pow(o)}/${tou(o)})`).join(', ')} — ${atk.reduce((a,o)=>a+pow(o),0)} danni potenziali`);commit();
+    // Il combattimento risolto fa parte del turno del Bot: si annulla insieme (issue #37).
+    undoMerge(true);blockModal(atk)}
   else{log(b,'Non attacca. Tocca a te: premi «Nuovo turno».');commit()}
 }
 function canBlock(bl,at){if(kw(at,'Flying')&&!(kw(bl,'Flying')||kw(bl,'Reach')))return false;return true}
@@ -1970,8 +1992,8 @@ function blockModal(atk){
       const s=document.createElement('select');s.dataset.a=a.u;s.innerHTML='<option value="">Nessun blocco</option>'+mine().filter(b=>canBlock(b,a)).map(b=>`<option value="${b.u}">${esc(cname(b))} ${pow(b)}/${tou(b)}</option>`).join('');l.appendChild(s);c.appendChild(l)});
     m.appendChild(c);const r=document.createElement('div');r.className='row';r.innerHTML='<button class="btn pri" id="cb-ok">Risolvi combattimento</button><button class="btn" id="cb-man">Risolvo a mano</button>';m.appendChild(r);
     $('#cb-ok').onclick=()=>{const used=new Set();const pairs=new Map();m.querySelectorAll('select').forEach(s=>{const b=s.value&&!used.has(s.value)?G.me.bf.find(o=>o.u===s.value):null;if(b)used.add(b.u);pairs.set(s.dataset.a,b||null)});openModal._c=null;closeModal();resolveCombat(G.bot,G.me,pairs)};
-    $('#cb-man').onclick=()=>{openModal._c=null;closeModal()};
-  });
+    $('#cb-man').onclick=()=>{undoMerge(false);openModal._c=null;closeModal()};
+  },()=>undoMerge(false));
 }
 function attackModal(){
   const cand=G.me.bf.filter(o=>isCreature(o)&&!o.tp&&!o.sick);
@@ -2237,6 +2259,7 @@ function zoneEl(p,{owner,live,mirror}){
     T('Nuovo turno',()=>{newTurn(p);commit()},'pri');T('Pesca',()=>{draw(p);commit()});T('Stappa tutto',()=>{p.bf.forEach(o=>{o.tp=false;o.atk=false});log(p,'Stappa tutto');commit()});
     if(G.mode==='bot')T('Attacca il bot',attackModal,'warm');
     T('Pedine',()=>tokenModal(p));T('Dado',()=>diceMenu(p,tools));T('Mulligan',()=>{mulligan(p);commit()});
+    {const n=undoCount(),top=n&&UNDO.stack.at(-1).name;T('Annulla',()=>{const a=undo();if(a)toast('Annullato: '+a)});const ub=tools.lastChild;ub.disabled=!n;ub.title=n?`Annulla: ${top} (Ctrl+Z, ancora ${n})`:'Niente da annullare in questa Partita'}
     if(G.mode==='online')T(p.rv?'Nascondi la mano':'Rivela la mano',()=>{p.rv=!p.rv;log(p,p.rv?'Rivela la mano':'Nasconde di nuovo la mano');commit()});
   } else if(owner==='bot'){
     T('Turno del bot',botTurn,'warm');T(revealBot?'Nascondi mano':'Mostra mano',()=>{revealBot=!revealBot;renderOppOnly()});T('Pesca',()=>{draw(p);commit()});T('Pedine',()=>tokenModal(p));
@@ -2359,6 +2382,9 @@ function cardMenu(p,u,x,y){const f=find(p,u);if(!f)return;const o=f.o;const done
 }
 function libMenu(p,x,y){openMenu(x,y,[['Pesca 1',()=>{draw(p);commit()},'D'],['Pesca 7',()=>{draw(p,7);commit()}],['Guarda le prime 1 (scruta 1)',()=>scryModal(p,1)],['Guarda le prime 2',()=>scryModal(p,2)],['Guarda le prime 3',()=>scryModal(p,3)],['Guarda le prime 5',()=>scryModal(p,5)],['Cerca nel grimorio',()=>searchModal(p)],'-',
   ['Macina 1',()=>{const o=p.lib.shift();if(o){p.gy.push(o);log(p,`Macina <b>${esc(cname(o))}</b>`)}commit()}],['Rivela la cima',()=>{const o=p.lib[0];if(o)log(p,`Rivela la cima: <b>${esc(cname(o))}</b>`);commit()}],['Mischia',()=>{shuffle(p.lib);log(p,'Mischia il grimorio');commit()}]])}
+// Ctrl+Z (Cmd+Z sul Mac) annulla l'ultima azione sul Tavolo (issue #37).
+document.addEventListener('keydown',e=>{if(VIEW!=='table'||!G.me||e.target.closest('input,textarea,select')||!(e.ctrlKey||e.metaKey)||e.altKey||e.shiftKey||e.key.toLowerCase()!=='z')return;
+  e.preventDefault();const n=undo();toast(n?'Annullato: '+n:'Niente da annullare')});
 document.addEventListener('keydown',e=>{if(VIEW!=='table'||!G.me||e.target.closest('input,textarea,select')||e.ctrlKey||e.metaKey||e.altKey)return;const k=e.key.toLowerCase();
   if(k==='d'){draw(G.me);commit()}else if(k==='u'){G.me.bf.forEach(o=>{o.tp=false;o.atk=false});log(G.me,'Stappa tutto');commit()}
   else if(k==='t'&&hoverU){for(const p of [G.me,G.bot]){const o=p&&p.bf.find(o=>o.u===hoverU);if(o){o.tp=!o.tp;commit();break}}}});
