@@ -253,6 +253,8 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .seg button:last-child{border-right:0}
 .seg button[aria-pressed="true"]{background:var(--surface2);color:var(--text);box-shadow:inset 0 -2px 0 var(--prism)}
 .zone{background:var(--felt);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;overflow:hidden}
+.zone.turn{border-color:color-mix(in srgb,var(--good) 60%,var(--line));box-shadow:0 0 0 1px color-mix(in srgb,var(--good) 35%,transparent)}
+.turnchip{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 .zone.opp{background:var(--felt2)}
 .zbar{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);background:rgba(0,0,0,.18)}
 .zone.opp .zbar{border-bottom:1px solid var(--line)}
@@ -331,6 +333,7 @@ details>summary{cursor:pointer}
 .bc{position:absolute;width:var(--bw);cursor:grab;touch-action:none;transition:transform .15s}
 .bc.tapped{transform:rotate(90deg)}
 .bc.atk .face{box-shadow:0 0 0 2px var(--ember),0 0 14px rgba(240,168,96,.55)}
+.bc.blk .face{box-shadow:0 0 0 2px var(--prism),0 0 14px color-mix(in srgb,var(--prism) 55%,transparent)}
 .bc.sick .face{filter:saturate(.75) brightness(.9)}
 .bc.drag-src{opacity:.25}
 .badges{position:absolute;left:-3px;right:-3px;bottom:-5px;display:flex;justify-content:space-between;gap:2px;pointer-events:none}
@@ -1885,7 +1888,13 @@ function moveTo(p,u,zone,opt={}){
   if(!opt.quiet){const hidden=(zone==='libTop'||zone==='libBot')&&r.from==='hand';
     log(p,zone==='bf'&&r.from==='hand'?(opt.fd?'Gioca una carta coperta':`Gioca <b>${esc(nm)}</b>`):`<b>${esc(hidden?'una carta':nm)}</b> ${ZN[zone]}`)}
 }
-function newTurn(p){p.turn++;p.bf.forEach(o=>{o.tp=false;o.sick=false;o.atk=false});const skip=p.turn===1&&G.first===who(p);if(!skip)draw(p,1,true);log(p,`Turno ${p.turn}${skip?' (va per primo, non pesca)':': stappa e pesca'}`)}
+// I segni di attacco e di blocco (issue #38) valgono per un turno: li toglie «Nuovo turno», come «Stappa tutto».
+function newTurn(p){p.turn++;p.bf.forEach(o=>{o.tp=false;o.sick=false;o.atk=false;o.blk=false});const skip=p.turn===1&&G.first===who(p);if(!skip)draw(p,1,true);log(p,`Turno ${p.turn}${skip?' (va per primo, non pesca)':': stappa e pesca'}`)}
+// Di chi è il turno (issue #38): 'me' o 'opp', dai numeri di turno dei due giocatori e da chi ha iniziato (first, 'me' o 'bot').
+// Non dagli orari, perché i due computer possono avere orologi diversi. Chi inizia è di turno quando ha più turni dell'altro,
+// o nessuno ha ancora premuto «Nuovo turno»; chi va per secondo quando ne ha quanti l'altro.
+function turnHolder(mine,theirs,first){const me1=first==='me';if(!mine&&!theirs)return me1?'me':'opp';
+  return me1?(mine>theirs?'me':'opp'):(theirs>mine?'opp':'me')}
 // Punteggio del Match in corso, con il suo formato (al meglio di 1 o di 3).
 const mScore=(r=G.match.res)=>matchScore(r,G.match.bo);
 const scoreText=(r=G.match.res)=>{const s=mScore(r);return `${s.w}-${s.l}${s.d?'-'+s.d:''}`};
@@ -2022,7 +2031,7 @@ let ROOM=null,OPP=null,oppPeer=null,roomPeers=[];
 const vis=o=>o.v||o.c;
 const utf8len=s=>encodeURIComponent(s).replace(/%[0-9A-F]{2}/g,'x').length;
 const PRESENCE_MAX=3900; // byte dell'intera presence {g:...}; la Stanza rifiuta oltre 4096
-function packPerm(o){const a=[o.fd?'?':o.c==='x'?'x':vis(o),Math.round(o.x*1000),Math.round(o.y*1000),(o.tp?1:0)|(o.fd?2:0)|(o.prep?4:0)|(o.atk?8:0),o.p1||0,o.n||0,o.c==='x'?((o.tn||'')+'|'+(o.pt||'')).slice(0,30):0];
+function packPerm(o){const a=[o.fd?'?':o.c==='x'?'x':vis(o),Math.round(o.x*1000),Math.round(o.y*1000),(o.tp?1:0)|(o.fd?2:0)|(o.prep?4:0)|(o.atk?8:0)|(o.blk?16:0),o.p1||0,o.n||0,o.c==='x'?((o.tn||'')+'|'+(o.pt||'')).slice(0,30):0];
   while(a.length>3&&!a[a.length-1])a.pop();return a}
 // hid: la scheda è nascosta. Chi resta nascosto a lungo non conta tra i presenti (vedi awake).
 let tabHidden=false;
@@ -2217,7 +2226,7 @@ function remotePile(s,total,pre){const ids=typeof s==='string'&&s?s.split(' ').s
   return Array.from({length:n},(_,i)=>{const id=ids[i-(n-ids.length)];return{u:pre+i,...(id?fromVis(id):{c:'?'})}})}
 function remoteToPlayer(g){const rv=Array.isArray(g.rv)?g.rv.map(fromVis):null;const hd=cnt(g.hd,99);
   return{name:String(g.nm||'Avversario'),fw:Array.isArray(g.fw)?{W:cnt(g.fw[0],9999),bw:cnt(g.fw[1],400)}:null,life:num(g.lf),psn:cnt(g.ps),ct:cnt(g.ct),lib:Array(cnt(g.lb,300)).fill({c:'?'}),hand:rv&&rv.length===hd?rv:Array(hd).fill({c:'?'}),rv:!!rv,turn:num(g.tn),
-  bf:(Array.isArray(g.bf)?g.bf:[]).filter(Array.isArray).map((a,i)=>{const o={u:'r'+i,...(a[0]==='x'?{c:'x'}:fromVis(a[0])),x:num(a[1])/1000,y:num(a[2])/1000,tp:!!(a[3]&1),fd:!!(a[3]&2),prep:!!(a[3]&4),atk:!!(a[3]&8),p1:num(a[4]),n:num(a[5])};if(a[0]==='x'){const[t,pt]=String(a[6]||'').split('|');o.tn=t||'Pedina';o.pt=pt||'1/1'}return o}),
+  bf:(Array.isArray(g.bf)?g.bf:[]).filter(Array.isArray).map((a,i)=>{const o={u:'r'+i,...(a[0]==='x'?{c:'x'}:fromVis(a[0])),x:num(a[1])/1000,y:num(a[2])/1000,tp:!!(a[3]&1),fd:!!(a[3]&2),prep:!!(a[3]&4),atk:!!(a[3]&8),blk:!!(a[3]&16),p1:num(a[4]),n:num(a[5])};if(a[0]==='x'){const[t,pt]=String(a[6]||'').split('|');o.tn=t||'Pedina';o.pt=pt||'1/1'}return o}),
   gy:remotePile(g.gy,g.gc,'g'),ex:remotePile(g.ex,g.ec,'e')}}
 // Campo remoto: le coordinate sono in proporzione al campo di chi gioca, che può essere più largo del mio.
 // Due carte che da me si toccano in verticale e che da lui non si toccavano in orizzontale (sender = {W,bw} del suo
@@ -2246,17 +2255,20 @@ function renderLog(){
 }
 function sanitizeRemote(t){return esc(String(t).replace(/<\/?b>/g,'\u0001')).replace(/\u0001/g,'')}
 
-function zoneEl(p,{owner,live,mirror}){
-  const z=document.createElement('div');z.className='zone'+(mirror?' opp':'');z.dataset.owner=owner;z.dataset.live=live?'1':'0';
+// Il lato di turno, 'me' o 'opp' (turnHolder in 50-game.js); null nel Goldfish o senza avversario.
+function activeSide(){if(!G.me||G.mode==='solo')return null;const t=G.mode==='bot'?G.bot?.turn:G.mode==='online'&&OPP&&!OPP.idle?num(OPP.tn):null;
+  return t==null?null:turnHolder(G.me.turn,t,G.first)}
+function zoneEl(p,{owner,live,mirror}){const on=activeSide()===(owner==='me'?'me':'opp');
+  const z=document.createElement('div');z.className='zone'+(mirror?' opp':'')+(on?' turn':'');z.dataset.owner=owner;z.dataset.live=live?'1':'0';
   const bar=document.createElement('div');bar.className='zbar';
   const pc=(k,icon,label,cls='')=>(live||p[k])?`<span class="life pc ${cls}" title="${label}">${live?`<button data-pc="${k}" data-d="-1" aria-label="${label}: meno 1">−</button>`:''}<i aria-hidden="true">${icon}</i><b>${p[k]||0}</b>${live?`<button data-pc="${k}" data-d="1" aria-label="${label}: più 1">+</button>`:''}</span>`:'';
-  bar.innerHTML=`<span class="zname">${esc(p.name)}</span><span class="life ${p.life<=5?'low':''}">${live?'<button data-life="-1" aria-label="Perdi 1 vita">−</button>':''}<b>${p.life}</b>${live?'<button data-life="1" aria-label="Guadagna 1 vita">+</button>':''}</span>
+  bar.innerHTML=`<span class="zname">${esc(p.name)}</span>${on?'<span class="chip turnchip" title="Ha premuto «Nuovo turno» per ultimo">Di turno</span>':''}<span class="life ${p.life<=5?'low':''}">${live?'<button data-life="-1" aria-label="Perdi 1 vita">−</button>':''}<b>${p.life}</b>${live?'<button data-life="1" aria-label="Guadagna 1 vita">+</button>':''}</span>
     ${pc('psn','☠','Segnalini veleno',(p.psn||0)>=7?'low':'')}${pc('ct','✦','Contatore generico (energia, esperienza…)')}
     <span class="zmeta"><span>Turno ${p.turn}</span><span>Mano ${p.hand.length}</span><span>Grimorio ${p.lib.length}</span></span><span class="ztools"></span>`;
   const tools=bar.querySelector('.ztools');
   const T=(l,f,cls='')=>{const b=document.createElement('button');b.className='btn sm '+cls;b.textContent=l;b.onclick=f;tools.appendChild(b)};
   if(owner==='me'){
-    T('Nuovo turno',()=>{newTurn(p);commit()},'pri');T('Pesca',()=>{draw(p);commit()});T('Stappa tutto',()=>{p.bf.forEach(o=>{o.tp=false;o.atk=false});log(p,'Stappa tutto');commit()});
+    T('Nuovo turno',()=>{newTurn(p);commit()},'pri');T('Pesca',()=>{draw(p);commit()});T('Stappa tutto',()=>{p.bf.forEach(o=>{o.tp=false;o.atk=false;o.blk=false});log(p,'Stappa tutto');commit()});
     if(G.mode==='bot')T('Attacca il bot',attackModal,'warm');
     T('Pedine',()=>tokenModal(p));T('Dado',()=>diceMenu(p,tools));T('Mulligan',()=>{mulligan(p);commit()});
     {const n=undoCount(),top=n&&UNDO.stack.at(-1).name;T('Annulla',()=>{const a=undo();if(a)toast('Annullato: '+a)});const ub=tools.lastChild;ub.disabled=!n;ub.title=n?`Annulla: ${top} (Ctrl+Z, ancora ${n})`:'Niente da annullare in questa Partita'}
@@ -2285,7 +2297,7 @@ function pileEl(k,label,arr,back,live){const d=document.createElement('div');d.c
   const top=arr[arr.length-1];if(arr.length){const f=faceEl(back?{c:'?'}:top,{back});d.appendChild(f);if(!back)setPreviewAttrs(d,top)}else{const e=document.createElement('div');e.className='empty';d.appendChild(e)}
   d.insertAdjacentHTML('beforeend',`<span class="cnt">${arr.length}</span><div class="pl">${label}</div>`);d.title=k==='lib'?(live?'Clic: pesca · destro: altre azioni':''):'Clic: vedi le carte';return d}
 function bfCard(o,{mirror,mine,live}){
-  const el=document.createElement('div');el.className='bc'+(o.tp?' tapped':'')+(o.atk?' atk':'')+(o.sick&&isCreature(o)&&mine?' sick':'');
+  const el=document.createElement('div');el.className='bc'+(o.tp?' tapped':'')+(o.atk?' atk':'')+(o.blk?' blk':'')+(o.sick&&isCreature(o)&&mine?' sick':'');
   const showFace=!o.fd||(mine&&live);el.appendChild(faceEl(o,{back:o.fd&&!(mine&&live)}));
   if(showFace&&o.c!=='?')setPreviewAttrs(el,o);if(o.fd&&mine&&live)el.firstChild.style.opacity='.55';
   if(live){el.dataset.u=o.u;el.dataset.z='bf'}
@@ -2374,7 +2386,9 @@ document.addEventListener('contextmenu',e=>{if(VIEW!=='table')return;const z=e.t
   if(el)cardMenu(p,el.dataset.u,e.clientX,e.clientY);else libMenu(p,e.clientX,e.clientY)});
 function cardMenu(p,u,x,y){const f=find(p,u);if(!f)return;const o=f.o;const done=fn=>()=>{fn();commit()};const zoom=['Ingrandisci',()=>showZoom(o,document.querySelector(`.zone[data-live="1"] [data-u="${CSS.escape(u)}"]`),{text:true})];
   const mv=[['In mano',done(()=>moveTo(p,u,'hand'))],['Nel cimitero',done(()=>moveTo(p,u,'gy'))],['In esilio',done(()=>moveTo(p,u,'ex'))],['In cima al grimorio',done(()=>moveTo(p,u,'libTop'))],['In fondo al grimorio',done(()=>moveTo(p,u,'libBot'))]];
-  if(f.z==='bf'){openMenu(x,y,[zoom,'-',[o.tp?'Stappa':'Tappa',done(()=>{o.tp=!o.tp}),'T'],[o.atk?'Togli da attacco':'Segna in attacco',done(()=>{o.atk=!o.atk;if(o.atk&&!kw(o,'Vigilance'))o.tp=true})],'-',
+  if(f.z==='bf'){openMenu(x,y,[zoom,'-',[o.tp?'Stappa':'Tappa',done(()=>{o.tp=!o.tp}),'T'],[o.atk?'Togli da attacco':'Segna in attacco',done(()=>{o.atk=!o.atk;if(o.atk){o.blk=false;if(!kw(o,'Vigilance'))o.tp=true}})],
+    // Chi blocca chi si mostra trascinando il bloccante davanti all'attaccante (issue #38).
+    [o.blk?'Togli dal blocco':'Segna in blocco',done(()=>{o.blk=!o.blk;if(o.blk){o.atk=false;log(p,`Blocca con <b>${esc(cname(o))}</b>`)}})],'-',
     ['Segnalino +1/+1',done(()=>o.p1=(o.p1||0)+1)],['Segnalino −1/−1',done(()=>o.p1=(o.p1||0)-1)],['Segnalino / fedeltà +1',done(()=>o.n=(o.n||0)+1)],['Segnalino / fedeltà −1',done(()=>o.n=(o.n||0)-1)],
     [o.prep?'Non più preparata':'Preparata',done(()=>{o.prep=!o.prep;log(p,`<b>${esc(cname(o))}</b> ${o.prep?'è preparata':'non è più preparata'}`)})],[o.fd?'Gira a faccia in su':'Gira a faccia in giù',done(()=>o.fd=!o.fd)],
     ['Crea una copia (pedina)',()=>mkToken(p,{c:o.c,v:o.v,tn:o.tn,pt:o.pt})],'-',...mv.filter(m=>m[0]!=='In campo')])}
@@ -2386,7 +2400,7 @@ function libMenu(p,x,y){openMenu(x,y,[['Pesca 1',()=>{draw(p);commit()},'D'],['P
 document.addEventListener('keydown',e=>{if(VIEW!=='table'||!G.me||e.target.closest('input,textarea,select')||!(e.ctrlKey||e.metaKey)||e.altKey||e.shiftKey||e.key.toLowerCase()!=='z')return;
   e.preventDefault();const n=undo();toast(n?'Annullato: '+n:'Niente da annullare')});
 document.addEventListener('keydown',e=>{if(VIEW!=='table'||!G.me||e.target.closest('input,textarea,select')||e.ctrlKey||e.metaKey||e.altKey)return;const k=e.key.toLowerCase();
-  if(k==='d'){draw(G.me);commit()}else if(k==='u'){G.me.bf.forEach(o=>{o.tp=false;o.atk=false});log(G.me,'Stappa tutto');commit()}
+  if(k==='d'){draw(G.me);commit()}else if(k==='u'){G.me.bf.forEach(o=>{o.tp=false;o.atk=false;o.blk=false});log(G.me,'Stappa tutto');commit()}
   else if(k==='t'&&hoverU){for(const p of [G.me,G.bot]){const o=p&&p.bf.find(o=>o.u===hoverU);if(o){o.tp=!o.tp;commit();break}}}});
 window.addEventListener('resize',()=>{if(VIEW==='table'&&!drag){renderTable();publish()}});
 
