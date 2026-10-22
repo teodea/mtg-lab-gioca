@@ -269,6 +269,7 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .mscore{font:600 12.5px var(--mono);letter-spacing:.02em;padding:4px 9px;border-radius:6px;background:var(--surface2);border:1px solid var(--line)}
 .mscore.won{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 .mscore.lost{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+#oppz .sbnote{display:block;width:max-content;margin:0 0 6px}
 .mscore.drawn{color:var(--ember);border-color:color-mix(in srgb,var(--ember) 45%,transparent)}
 .mgrid>.nog,.mgrid>.muted{grid-column:1/-1}
 details>summary{cursor:pointer}
@@ -2049,6 +2050,39 @@ function roundMenu(){const c=$('#rtchip'),r=c.getBoundingClientRect(),m=G.match,
     ...(G.mode!=='online'?['-',['Spegni il timer',()=>{delete m.tm;delete m.tx;setRoundPref({off:true});commit()}]]:[])])}
 function initRound(){setInterval(paintRound,1000)}
 
+/* 54-tra-partite.js */
+// Tra una Partita e l'altra, online (issue #34 e #36).
+// Chi inizia: nella prima Partita e dopo un pareggio sceglie chi vince il lancio della moneta, poi chi ha perso la Partita
+// prima. La moneta e la scelta passano nella presence (pk) e valgono per tutti e due: G.match.pick = {gn, coin: {r, w}, first},
+// dove w (chi ha vinto il lancio) e first (chi inizia) sono dal mio punto di vista, 'me' o 'opp'. Se lanciano tutti e due vale
+// il lancio con r più basso, sulle due pagine, senza bisogno degli orologi; la scelta la scrive solo chi deve sceglierla.
+// Il lancio e la scelta valgono per la Partita gn: un Match nuovo, o un Kit nuovo, li azzerano con G.match.
+const nextGn=()=>gameOpen()?G.gn:mScore().over?1:G.match.res.length+1;
+function pickNow(){const gn=nextGn(),p=G.match.pick;return p&&p.gn===gn?p:(G.match.pick={gn})}
+// Chi sceglie chi inizia la prossima Partita, 'me' o 'opp'; null finché la moneta non è lanciata.
+function chooser(){const last=mScore().over?'':G.match.res.slice(-1);if(last==='L')return'me';if(last==='W')return'opp';return pickNow().coin?.w||null}
+function flipCoin(){const p=pickNow();if(!p.coin)p.coin={r:Math.random(),w:Math.random()<.5?'me':'opp'};return p.coin}
+// first: 'me' o 'opp'. false se non tocca a me scegliere.
+function choose(first){if(chooser()!=='me')return false;pickNow().first=first;return true}
+function pickPack(){const p=G.match?.pick;return p?[p.gn,p.coin?p.coin.r:-1,p.coin?(p.coin.w==='me'?1:0):-1,p.first?(p.first==='me'?1:0):-1]:null}
+// Moneta e scelta dell'avversario (opp: la sua presence), rovesciate: true se è cambiato qualcosa.
+function pickSync(opp){const a=opp&&Array.isArray(opp.pk)?opp.pk:null;if(!a||G.mode!=='online'||!G.match||num(a[0])!==nextGn())return false;
+  const p=pickNow(),r=+a[1];let changed=false;
+  if(r>=0&&r<1&&(!p.coin||r<p.coin.r)){p.coin={r,w:a[2]===1?'opp':'me'};if(chooser()!=='me')delete p.first;changed=true}
+  if(chooser()==='opp'&&(a[3]===0||a[3]===1)){const f=a[3]===1?'opp':'me';if(p.first!==f){p.first=f;changed=true}}
+  return changed}
+
+// Stato del Sideboard (issue #36): mentre la finestra tra le Partite è aperta la presence ha sb, cioè quante carte hanno il
+// Mazzo e il Sideboard (MTR 3.16: l'avversario può contarle), mai quali. Nessun blocco: ognuno inizia quando vuole.
+let SIDEBOARDING=false;
+const setSideboarding=on=>{SIDEBOARDING=!!on};
+const sbPack=()=>SIDEBOARDING?[deckList().length,sideboard().length]:null;
+const oppName=()=>OPP?.nm||'L\'avversario';
+// La riga su cosa sta facendo l'avversario tra le Partite; '' se non c'è niente da dire.
+function sbStatus(){if(G.mode!=='online'||!OPP||OPP.idle&&!OPP.sb)return'';
+  if(Array.isArray(OPP.sb))return `${oppName()} sta facendo Sideboard · Mazzo ${Math.max(0,num(OPP.sb[0]))}, Sideboard ${Math.max(0,num(OPP.sb[1]))}`;
+  return num(OPP.gn)===nextGn()&&!gameOpen()?`${oppName()} è pronto: ha iniziato la Partita ${nextGn()}`:''}
+
 /* 60-bot.js */
 function landsOf(p){return p.bf.filter(o=>o.c!=='x'&&isLand(o.c)&&!o.tp)}
 function canPay(p,cid){
@@ -2193,10 +2227,12 @@ function syncMate(){const nk=!gameOpen()&&mateMoved(allPeers);
   if(MATE){const r=mergeTeam(MATE.tc);if(r.changed){syncLay();saveS();publish()}
     if(r.got.length){const byU=byUid(S.pool);toast(`${MATE.nm||'Il Compagno'} ti ha dato ${r.got.length===1?BY[byU[r.got[0]].c].n:r.got.length+' carte'}: ${r.got.length===1?'è':'sono'} nel tuo Sideboard`)}}
   return JSON.stringify([MATE,S.tc])!==was}
-function compactMe(){const p=G.me;const base={v:2,nm:(S.nick||'Giocatore').slice(0,24),lg:G.log.filter(l=>l.w==='me').slice(-6).map(l=>[l.ts,l.tx.slice(0,110),l.k||0]),ms:G.match?.res||'',bo:G.match?.bo||3,...(G.match?.hg?{hg:1}:{}),...(tabHidden?{hid:1}:{})};
+function compactMe(){const p=G.me;const base={v:2,nm:(S.nick||'Giocatore').slice(0,24),lg:G.log.filter(l=>l.w==='me').slice(-6).map(l=>[l.ts,l.tx.slice(0,110),l.k||0]),ms:G.match?.res||'',bo:G.match?.bo||3,...(G.match?.hg?{hg:1}:{}),...(tabHidden?{hid:1}:{}),
+    // Tra le Partite (issue #34 e #36): moneta e scelta di chi inizia, conteggi del Sideboard mentre lo si cambia.
+    ...(pickPack()?{pk:pickPack()}:{}),...(sbPack()?{sb:sbPack()}:{})};
   if(!p||G.mode!=='online')return{...base,idle:1};
   // fw: larghezza del mio campo e delle mie carte in px, per capire da remoto quali carte si toccavano.
-  const o={...base,fw:[Math.round(myBfW()),Math.round(cardW())],lf:p.life,ps:p.psn||0,ct:p.ct||0,lb:p.lib.length,hd:p.hand.length,tn:p.turn,rv:p.rv?p.hand.slice(0,12).map(vis):0,
+  const o={...base,gn:G.gn,fw:[Math.round(myBfW()),Math.round(cardW())],lf:p.life,ps:p.psn||0,ct:p.ct||0,lb:p.lib.length,hd:p.hand.length,tn:p.turn,rv:p.rv?p.hand.slice(0,12).map(vis):0,
     bf:shownBf(p).map(packPerm),gc:p.gy.length,ec:p.ex.length,
     // Carte date all'avversario e carte sue ridate (issue #40).
     // Il timer del turno (issue #33).
@@ -2241,8 +2277,11 @@ function peersChanged(timer){const before=peerIds();
   // quando arriva l'amico; una scelta fatta a mano (oppPicked) non si tocca.
   const playing=roomPeers.filter(p=>!p.presence.g.idle),others=playing.filter(p=>!p.isMe),mine=roomPeers.find(p=>p.peer===oppPeer)?.isMe;
   if(!oppPicked&&others.length===1&&(!oppPeer||mine))oppPeer=others[0].peer;else if(!oppPeer&&playing.length===1)oppPeer=playing[0].peer;
+  // All'inizio del Match nessuno è ancora in Partita: con un solo altro giocatore nella Stanza è lui l'avversario, così moneta e
+  // scelta di chi inizia si condividono già nella finestra «Nuovo Match» (issue #34).
+  else if(!oppPeer&&roomPeers.length===1)oppPeer=roomPeers[0].peer;
   const cur=roomPeers.find(p=>p.peer===oppPeer);OPP=cur?cur.presence.g:null;
-  const ctl=syncControl(OPP),tm=roundSync(OPP);if((ctl||tm)&&!drag)commit();
+  const ctl=syncControl(OPP),tm=roundSync(OPP),pk=pickSync(OPP);if((ctl||tm||pk)&&!drag)commit();nextGameModal.paint?.();
   syncMatch();roomChip();
   // La barra della modalità si ridisegna solo se cambia ciò che mostra (avversari, risultati), per non rubare i clic.
   const mbKey=JSON.stringify([oppPeer,OPP?.ms,OPP?.bo,OPP?.hg,roomPeers.map(p=>p.presence.g.nm)]);
@@ -2327,13 +2366,16 @@ function matchBarHTML(){const res=G.match.res,bo=G.match.bo,s=mScore();const gn=
 // Con una Partita aperta (restart) la finestra la ricomincia, ma prima propone di segnarne il risultato.
 function nextGameModal(){const s=mScore();const gn=s.over?1:G.match.res.length+1;const restart=gameOpen();
   const last=s.over?'':G.match.res.slice(-1);let first=last==='W'?'bot':last==='L'||G.mode==='online'?'me':'coin';let fmt=G.match.hg?'hg':G.match.bo;
+  // Online moneta e scelta valgono per tutti e due (issue #34), e l'avversario vede che stai facendo Sideboard (issue #36).
+  const shared=G.mode==='online'&&!!OPP;if(gn>1&&!restart){setSideboarding(true);publish()}
   openModal(restart?`Ricomincia la Partita ${gn}`:gn===1?'Nuovo Match':`Partita ${gn}: Sideboard`,m=>{m.parentElement.classList.add('wide');
     const draw_=()=>{const st=deckStats();syncLay();const oppL=G.mode==='bot'?'il bot':G.mode==='online'?"l'avversario":'';
       const seg=(lbl,opts,val,attr)=>`<div class="seg" role="group" aria-label="${lbl}">${opts.map(([k,l])=>`<button ${attr}="${k}" aria-pressed="${val==k}">${l}</button>`).join('')}</div>`;
       m.innerHTML=`<div class="row" style="justify-content:space-between"><div class="eyebrow">Mazzo ${st.total} carte${st.total<40?' · <span style="color:var(--bad)">meno di 40</span>':''} · clicca o trascina una carta per spostarla</div>
-        <div class="row">${gn===1?seg('Formato del Match',[[1,'Bo1'],[3,'Bo3'],['hg','2HG']],fmt,'data-bo'):''}${seg('Chi inizia',[['me','Inizio io'],...(oppL?[['bot','Inizia '+oppL]]:[['bot','Vado per secondo']]),...(G.mode!=='online'?[['coin','Moneta']]:[])],first,'data-f')}</div></div>
+        <div class="row">${gn===1?seg('Formato del Match',[[1,'Bo1'],[3,'Bo3'],['hg','2HG']],fmt,'data-bo'):''}${shared?'<span class="row" id="pickbox"></span>':seg('Chi inizia',[['me','Inizio io'],...(oppL?[['bot','Inizia '+oppL]]:[['bot','Vado per secondo']]),...(G.mode!=='online'?[['coin','Moneta']]:[])],first,'data-f')}</div></div>
+        ${shared?'<p class="muted" id="oppst" style="margin:0;font-size:12px"></p>':''}
         ${restart?`<div class="row notice"><span>La Partita ${gn} non ha ancora un risultato. Se è finita, segna il risultato:</span><button class="btn sm" data-r="W">Ho vinto</button><button class="btn sm" data-r="L">Ho perso</button><button class="btn sm" data-r="D">Pareggio</button></div>`:''}
-        ${gn>1?`<p class="muted" style="margin:0;font-size:12px">${last==='L'?'Hai perso la Partita precedente: scegli tu chi inizia.':last==='W'?"Hai vinto la Partita precedente: sceglie l'avversario chi inizia.":'Pareggio: chi inizia si decide come per la prima Partita.'}</p>`:G.mode==='online'?'<p class="muted" style="margin:0;font-size:12px">Scegliete lo stesso formato, poi decidete chi inizia con una moneta (Dado → Lancia una moneta) e scegliete entrambi la stessa cosa.</p>':''}
+        ${gn>1?`<p class="muted" style="margin:0;font-size:12px">${last==='L'?'Hai perso la Partita precedente: scegli tu chi inizia.':last==='W'?"Hai vinto la Partita precedente: sceglie l'avversario chi inizia.":'Pareggio: chi inizia si decide con la moneta, come per la prima Partita.'}</p>`:shared?'<p class="muted" style="margin:0;font-size:12px">Scegliete lo stesso formato. Chi inizia si decide con la moneta: la lancia uno dei due, e chi vince il lancio sceglie.</p>':''}
         ${builderHTML()}
         ${restart?'':`<p class="muted" style="margin:0;font-size:12px">Durante la Partita l'Apertura e il Mazzo restano bloccati: per tornarci finisci la Partita (Fine Partita) o ${G.mode==='solo'?'chiudila':'abbandonala, che conta come persa'}.${gn===1&&fmt===3?" Nel Bo3 tra una Partita e l'altra si torna al Mazzo.":''}</p>`}
         <div class="row mfoot"><button class="btn pri" id="sbgo">${restart?`Ricomincia la Partita ${gn}`:gn===1?`Inizia il Match (${fmt==='hg'?'2HG':'Bo'+fmt})`:`Inizia la Partita ${gn}`}</button></div>`;
@@ -2341,8 +2383,20 @@ function nextGameModal(){const s=mScore();const gn=s.over?1:G.match.res.length+1
       m.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{first=b.dataset.f;draw_()});
       m.querySelectorAll('[data-bo]').forEach(b=>b.onclick=()=>{fmt=b.dataset.bo==='hg'?'hg':+b.dataset.bo;draw_()});
       ZREDRAW=draw_;mountBuilder(m,draw_);
-      $('#sbgo').onclick=()=>{closeModal();startGame(first==='coin'?null:first,fmt)}};
-    draw_()})}
+      $('#sbgo').onclick=()=>{const p=shared&&pickNow();closeModal();startGame(p?.first?(p.first==='me'?'me':'bot'):first==='coin'?null:first,fmt)};paint()};
+    // Moneta, scelta e stato dell'avversario: si ridisegnano da soli a ogni presence (peersChanged), senza toccare il costruttore.
+    const paint=()=>{if(!shared||!$('#pickbox'))return;const c=chooser(),p=pickNow(),nm=esc(oppName()),needCoin=!(last==='L'||last==='W');
+      const html=(needCoin?p.coin?`<span class="chip on">Vince il lancio: ${c==='me'?'tu':nm}</span>`:'<button class="btn" id="coin">Lancia la moneta</button>':'')+
+        (c==='me'?`<div class="seg" role="group" aria-label="Chi inizia">${[['me','Inizio io'],['opp','Inizia '+nm]].map(([k,l])=>`<button data-pf="${k}" aria-pressed="${p.first===k}">${l}</button>`).join('')}</div>`:
+         c==='opp'?`<span class="muted">${p.first?`${nm} ha scelto: ${p.first==='me'?'inizi tu':'inizia lui'}`:`Sceglie ${nm} chi inizia…`}</span>`:'');
+      // Si riscrive solo se cambia, per non togliere un pulsante da sotto il mouse.
+      const box=$('#pickbox');if(box.dataset.html!==html){box.innerHTML=html;box.dataset.html=html}
+      $('#oppst').textContent=sbStatus();
+      const go=$('#sbgo');if(go){go.disabled=!p.first;go.title=p.first?'':'Prima decidete chi inizia'}
+      $('#coin')&&($('#coin').onclick=()=>{flipCoin();publish();paint()});
+      m.querySelectorAll('[data-pf]').forEach(b=>b.onclick=()=>{choose(b.dataset.pf);publish();paint()})};
+    nextGameModal.paint=paint;
+    draw_()},()=>{nextGameModal.paint=null;if(SIDEBOARDING){setSideboarding(false);publish()}})}
 function renderOppOnly(){
   const oz=$('#oppz');if(!oz)return;oz.innerHTML='';
   if(G.mode==='bot'){if(G.bot)oz.appendChild(zoneEl(G.bot,{owner:'bot',live:true,mirror:true}));else oz.innerHTML='<div class="nog">Avvia una nuova Partita: il bot aprirà il suo kit e costruirà un Mazzo.</div>'}
@@ -2351,6 +2405,8 @@ function renderOppOnly(){
     else if(!OPP)oz.innerHTML=`<div class="nog">In attesa dell'avversario… Quando il tuo amico apre il link della stanza (<b>Copia il link per l'amico</b>) e sceglie «Contro un amico», il suo campo compare qui in tempo reale.</div>`;
     else if(OPP.idle)oz.innerHTML=`<div class="nog"><b>${esc(OPP.nm)}</b> è al tavolo ma non ha ancora iniziato una Partita.</div>`;
     else{const rp=remoteToPlayer(OPP);oz.appendChild(zoneEl(rp,{owner:'opp',live:false,mirror:true}));spreadRemote(oz.querySelector('.bf'),rp.bf,rp.fw)}
+    // Tra le Partite: l'avversario sta facendo Sideboard, o ha già iniziato (issue #36).
+    const st=sbStatus();if(st&&OPP)oz.insertAdjacentHTML('afterbegin',`<div class="sbnote chip warn">${esc(st)}</div>`);
   } else oz.innerHTML='<div class="nog" style="margin:0">Modalità goldfish: nessun avversario, prova le tue pescate e la tua curva.</div>';
   renderLog();  drawArrows();
 }
