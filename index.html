@@ -269,6 +269,9 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .mscore{font:600 12.5px var(--mono);letter-spacing:.02em;padding:4px 9px;border-radius:6px;background:var(--surface2);border:1px solid var(--line)}
 .mscore.won{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 .mscore.lost{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.dpicks{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-bottom:12px}.dcol .eyebrow{margin-bottom:4px}
+.dbots{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:16px}.dbots .sumbox{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px}.dbots .sumbox .btn{margin-left:auto}
+.slot.pickable .face{cursor:pointer;transition:transform .12s}.slot.pickable .face:hover{transform:translateY(-4px);outline:2px solid var(--prism)}
 .histhead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
 .hlist{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
 .hrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12.5px}.hrow .mscore{font-size:11px;padding:2px 7px}
@@ -794,6 +797,42 @@ const kitTeam=code=>{const m=/^FRA2(x12)?-/i.exec(code);return m?(m[1]?12:8):0};
 const kitFromCode=code=>{if(isListCode(code))return makeListKit(code);const n=kitTeam(code);return n?makeTeamKit(code,n):makeKit(code)};
 const newSeed=(team=0)=>(team?team===12?'FRA2x12-':'FRA2-':'FRA-')+Math.random().toString(36).slice(2,7).toUpperCase();
 
+/* 12-draft.js */
+// Draft a 8 di FRA (issue #46): tu al posto 0 e sette Bot. Ognuno apre 3 Buste di Play Booster, con la collation di
+// 11-boosters.js e senza la pedina: 14 carte, terra compresa, come le 14 scelte dei dati di 17Lands. La prima e la terza Busta
+// passano a sinistra (dal posto i al posto i+1), la seconda a destra. Lo stesso codice (FRAD-…) dà le stesse 24 Buste, e i Bot
+// non tirano a caso: con le stesse scelte tue il draft finisce sempre uguale.
+// Lo stato d = {code, rounds: [3][8] Buste da aprire, round, pick, packs: [8] Buste in mano, picks: [8] carte prese, done}.
+const DRAFT_PRE='FRAD-',SEATS=8;
+const isDraftCode=code=>String(code).toUpperCase().startsWith(DRAFT_PRE);
+const newDraftCode=()=>DRAFT_PRE+Math.random().toString(36).slice(2,7).toUpperCase();
+function draftNew(code){const rng=mulberry(hashStr(String(code).toUpperCase()));let n=0;
+  const rounds=[0,1,2].map(()=>Array.from({length:SEATS},()=>booster(rng).filter(x=>!x.k).map(x=>({...x,u:'d'+(n++)}))));
+  return{code,rounds,round:0,pick:0,packs:rounds[0].map(p=>p.slice()),picks:Array.from({length:SEATS},()=>[]),done:false}}
+const passDir=round=>round===1?-1:1;
+// Prendo la carta u dalla mia Busta, i Bot prendono dalla loro, poi le Buste passano. Finite le carte si apre la Busta dopo.
+function draftPick(d,u){if(d.done)return d;const i=d.packs[0].findIndex(x=>x.u===u);if(i<0)return d;
+  d.picks[0].push(d.packs[0].splice(i,1)[0]);
+  for(let s=1;s<SEATS;s++){const x=botChoice(d.packs[s],d.picks[s]);d.packs[s].splice(d.packs[s].indexOf(x),1);d.picks[s].push(x)}
+  const dir=passDir(d.round),next=Array(SEATS);d.packs.forEach((p,s)=>next[(s+dir+SEATS)%SEATS]=p);d.packs=next;d.pick++;
+  if(!d.packs[0].length){d.round++;d.pick=0;if(d.round>=3){d.done=true;d.packs=[]}else d.packs=d.rounds[d.round].map(p=>p.slice())}
+  return d}
+// Il mio Pool dopo il draft: le mie scelte, senza le terre base, che si aggiungono comunque con i contatori.
+const draftPool=d=>d.picks[0].filter(x=>!/Basic Land/.test(BY[x.c].t||''));
+
+// I Bot (ADR 0009) prendono la carta con l'ATA più bassa, cioè quella che le persone prendono prima: il valore è 15 meno l'ATA.
+// Senza ATA contano la rarità e, se c'è, il GIH WR. Più carte hanno preso, più evitano quelle fuori dai loro due colori
+// principali, come chi legge i segnali. A parità vale l'ordine della Busta.
+const ATA_=typeof ATA==='undefined'?null:ATA;
+const RAR_PTS={m:10,r:8,u:4,c:2};
+function pickValue(cid){const a=ATA_?.w[cid];if(a)return 15-a[0];const g=typeof GIH_!=='undefined'&&GIH_?.w[cid];return (RAR_PTS[BY[cid].r]||2)+(g?(g[0]-50)/5:0)}
+function botColors(picks){const w={W:0,U:0,B:0,R:0,G:0};
+  picks.forEach(x=>{const c=BY[x.c].c||'';if(c&&!isLand(x.c))[...c].forEach(k=>w[k]+=pickValue(x.c)/c.length)});return w}
+function botChoice(pack,picks){const w=botColors(picks),top=COLORS.slice().sort((a,b)=>w[b]-w[a]).slice(0,2),commit=Math.min(1,picks.length/6);
+  let best=null,bv=-Infinity;
+  pack.forEach(x=>{const cols=[...(BY[x.c].c||'')],on=cols.every(k=>top.includes(k)),v=pickValue(x.c)-(on?0:4*commit);if(v>bv){bv=v;best=x}});
+  return best}
+
 /* 20-autobuild.js */
 const REMOVAL=/destroy target|exile target|deals? (\d+|X) damage to (target|any|each creature)|target creature gets -|fights? |sacrifices? a creature|deals damage equal/i;
 const REMOVAL_BONUS=1.4;
@@ -1231,9 +1270,19 @@ function cleanLay(lay,us){const out={};if(!lay||typeof lay!=='object')return out
 // Two-Headed Giant: team = 8 o 12 Buste (0 per il Kit individuale), seat = il posto scelto, 0 per il Compagno A e 1 per il B.
 // opened conta le Buste aperte tra le proprie; viewB è l'indice della Busta guardata, tra tutte quelle del Kit.
 // at: quando è stato aperto il Kit, per capire chi dei due Compagni ha il Kit più recente; matePeer: l'ultimo Compagno trovato.
-function freshKit(seed){const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null};S.viewB=firstOwn();
+function freshKit(seed){if(isDraftCode(seed)){freshDraft(seed);return}const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null};S.viewB=firstOwn();
   // Un Pool da lista non ha Buste da aprire: la Sessione parte dalla costruzione.
   if(!S.boosters.length)S.opened=ownCount();saveS()}
+// Draft a 8 (issue #46): la Sessione parte dal draft invece che dall'Apertura delle Buste. Il Pool resta vuoto finché il draft
+// non finisce, e poi sono le mie scelte (draftPool). Lo stato del draft sta in S.draft, così sopravvive a un ricaricamento.
+function freshDraft(seed){S={seed,team:0,seat:0,boosters:[],promo:null,pool:[],opened:0,viewB:0,deck:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},
+  nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null,draft:draftNew(seed)};saveS()}
+// Prendo la carta u; a draft finito il Pool sono le mie scelte e si passa alla costruzione.
+function draftStep(u){const d=S.draft;if(!d||d.done)return;draftPick(d,u);if(d.done){S.pool=draftPool(d);S.opened=ownCount()}saveS()}
+// I Mazzi dei sette Bot a draft finito, costruiti con Auto-costruisci: {seat, pair, list} con le carte {c, v} e le terre base.
+function draftBots(){const d=S.draft;if(!d?.done)return[];return d.picks.slice(1).map((ps,i)=>{const pool=ps.filter(x=>!/Basic Land/.test(BY[x.c].t||''));
+  const b=autoBuild(pool,GIH_?.w),byU=byUid(pool),list=b.uids.map(u=>byU[u].v?{c:byU[u].c,v:byU[u].v}:{c:byU[u].c});
+  COLORS.forEach(c=>{for(let k=0;k<b.basics[c];k++)list.push({c:BASIC_ID[c]})});return{seat:i+1,pair:b.pair,list}})}
 // Importa lista (issue #30): una Sessione nuova con il Pool della lista, e con il suo Mazzo e le sue terre base se la lista li ha.
 function freshList(r){freshKit(r.code);S.deck=[...r.deck];S.basics={...r.basics};saveS()}
 // Le Buste di chi guarda: tutte nel Kit individuale, metà nel Kit di squadra.
@@ -1242,7 +1291,7 @@ const firstOwn=(s=S)=>s.team&&s.seat?s.team/2:0;
 const isOwnBooster=(i,s=S)=>i>=firstOwn(s)&&i<firstOwn(s)+ownCount(s);
 // La Sessione va in un solo verso: Apertura, poi Mazzo, poi Partite. Si è nell'Apertura finché restano Buste proprie chiuse;
 // passando al Mazzo si aprono tutte e da lì non se ne aprono altre (per un Pool diverso serve un Kit nuovo).
-const inOpening=(s=S)=>s.opened<ownCount(s);
+const inOpening=(s=S)=>s.draft?!s.draft.done:s.opened<ownCount(s);
 // Pool di squadra (ADR 0002): tc[i] conta i passaggi della carta di indice i nel Pool (0 se manca). Il proprietario è
 // quello iniziale (x.o) se tc[i] è pari, il Compagno se è dispari. Solo il proprietario attuale incrementa tc[i], quindi ogni
 // carta ha un solo scrittore: unendo due stati carta per carta con il massimo, le due pagine convergono.
@@ -1384,7 +1433,8 @@ function go(v){VIEW=v;markTabs();['open','deck','table'].forEach(x=>$('#v-'+x).h
 // solo aprendo le Buste rimaste. Il Tavolo si guarda sempre (c'è il Registro con la chat).
 function markTabs(){const lock=typeof gameOpen==='function'&&gameOpen();document.querySelectorAll('.tabs button').forEach(b=>{const v=b.dataset.view,l=lock&&v!=='table';
   b.setAttribute('aria-selected',v===VIEW);b.classList.toggle('locked',l);b.title=l?'Bloccato durante la Partita':''})}
-function goStep(v){if(v===VIEW)return;if(v!=='table'&&gameOpen()){lockedModal(v);return}if(v==='deck'&&inOpening()){toDeckModal();return}go(v)}
+function goStep(v){if(v===VIEW)return;if(v!=='table'&&gameOpen()){lockedModal(v);return}
+  if(v==='deck'&&inOpening()){if(S.draft){toast('Prima finisci il draft: poi costruisci il Mazzo con le tue scelte');return}toDeckModal();return}go(v)}
 // Dall'Apertura al Mazzo: le Buste ancora chiuse si aprono tutte, e poi non se ne aprono altre.
 function toDeckModal(){const n=ownCount()-S.opened;
   openModal('Passi alla costruzione del Mazzo',m=>{
@@ -1419,17 +1469,18 @@ function renderOpen(){
   const fl=flipping()&&FLIP.b===vb,shown=i=>!fl||i<FLIP.n;
   const range=o=>`Buste ${o*team/2+1}-${(o+1)*team/2}`+(S.pool.some(x=>x.p&&x.o===o)?' e promo':'');
   // Un Pool da una lista (issue #30) non ha Buste: l'Apertura mostra tutte le sue carte, e si va al Mazzo.
-  const list=!n;
-  el.innerHTML=`<div class="intro"><div><div class="eyebrow">${list?'Pool da una lista · senza Buste e senza promo':KIT_KIND[team][1]}</div><h2>${list?'Il tuo Pool importato':team?'Apri le tue Buste del Kit di squadra':'Apri il tuo Pool di Reality Fracture'}</h2>${list?`<p>${S.pool.length} carte da una lista incollata. Non ci sono Buste da aprire: passa al Mazzo. Il codice qui sotto contiene tutto il Pool: chi lo carica con «Carica codice» ottiene le stesse carte.</p>`:team?`<p>Un solo codice per tutta la squadra: dallo al tuo Compagno e scegliete posti diversi. Ognuno apre le sue Buste (${range(0)} al ${seatName(0)}, ${range(1)} al ${seatName(1)}) e poi può rivedere quelle dell'altro. Nel Mazzo usi le carte di cui sei proprietario, e nella scheda Mazzo puoi darne al Compagno. Le Buste seguono la stessa collation del Kit individuale.</p>`:`<p>Ogni kit nasce da un codice: condividilo e il tuo amico otterrà lo stesso identico Pool. Le buste seguono la collation delle Play Booster vere, con le percentuali ufficiali, e le carte escono nell'ordine in cui stanno nella busta: 6 comuni di tutti e 5 i colori, 2 non comuni, 3 carte «eco» (una coppia e la carta vicina sul foglio), la Special Guest in 1 busta su 55, rara o mitica con i trattamenti Shattered Mirror, Sculptor's Stronghold, Braintwister e Portal view, foil, terra e pedina.</p>`}</div>
-  <div class="kitctl"><div class="seg" role="group" aria-label="Tipo di Kit">${[0,8,12].map(k=>`<button data-kind="${k}" aria-pressed="${!list&&team===k}">${KIT_KIND[k][0]}</button>`).join('')}</div>
+  // Un draft (issue #46) non ha Buste da aprire: al loro posto c'è la vista del draft (46-draft.js).
+  const dr=S.draft,list=!n&&!dr;
+  el.innerHTML=`<div class="intro"><div><div class="eyebrow">${dr?'Draft a 8 · tu e sette Bot':list?'Pool da una lista · senza Buste e senza promo':KIT_KIND[team][1]}</div><h2>${dr?(dr.done?'Draft finito':'Il draft di Reality Fracture'):list?'Il tuo Pool importato':team?'Apri le tue Buste del Kit di squadra':'Apri il tuo Pool di Reality Fracture'}</h2>${dr?`<p>Tre Buste a testa: la prima e la terza passano a sinistra, la seconda a destra. Ogni Bot prende la carta che le persone prendono prima, secondo i dati del draft di 17Lands, e poi resta nei suoi colori. Lo stesso codice dà lo stesso draft. Alla fine le tue scelte sono il Pool.</p>`:list?`<p>${S.pool.length} carte da una lista incollata. Non ci sono Buste da aprire: passa al Mazzo. Il codice qui sotto contiene tutto il Pool: chi lo carica con «Carica codice» ottiene le stesse carte.</p>`:team?`<p>Un solo codice per tutta la squadra: dallo al tuo Compagno e scegliete posti diversi. Ognuno apre le sue Buste (${range(0)} al ${seatName(0)}, ${range(1)} al ${seatName(1)}) e poi può rivedere quelle dell'altro. Nel Mazzo usi le carte di cui sei proprietario, e nella scheda Mazzo puoi darne al Compagno. Le Buste seguono la stessa collation del Kit individuale.</p>`:`<p>Ogni kit nasce da un codice: condividilo e il tuo amico otterrà lo stesso identico Pool. Le buste seguono la collation delle Play Booster vere, con le percentuali ufficiali, e le carte escono nell'ordine in cui stanno nella busta: 6 comuni di tutti e 5 i colori, 2 non comuni, 3 carte «eco» (una coppia e la carta vicina sul foglio), la Special Guest in 1 busta su 55, rara o mitica con i trattamenti Shattered Mirror, Sculptor's Stronghold, Braintwister e Portal view, foil, terra e pedina.</p>`}</div>
+  <div class="kitctl"><div class="seg" role="group" aria-label="Tipo di Kit">${[0,8,12].map(k=>`<button data-kind="${k}" aria-pressed="${!list&&!dr&&team===k}">${KIT_KIND[k][0]}</button>`).join('')}<button id="newdraft" aria-pressed="${!!dr}" title="Draft a 8 con sette Bot">Draft a 8</button></div>
   ${team?`<div class="seg" role="group" aria-label="Il tuo posto">${[0,1].map(o=>`<button data-seat="${o}" aria-pressed="${S.seat===o}"${inOpening()?'':` disabled title="Il posto si sceglie durante l'Apertura: per cambiarlo ricarica il codice del Kit"`}>${seatName(o)} · ${range(o)}</button>`).join('')}</div>`:''}
   <div class="row"><input type="text" id="seed" value="${esc(S.seed)}" aria-label="Codice kit" size="13" class="mono"><button class="btn" id="regen">Carica codice</button><button class="btn" id="implist" title="Il Pool da una lista di carte di Arena, Moxfield o MTGO">Importa lista…</button><button class="btn pri" id="newkit">Nuovo kit</button></div></div></div>
-  <div class="packs" id="packs"></div>
+  ${dr?'<div id="draftbox"></div>':`<div class="packs" id="packs"></div>
   <div class="row" style="justify-content:space-between;margin-bottom:12px"><h3 style="font-size:16px">${list?`Il Pool · ${S.pool.length} carte`:b?`Busta ${vb+1}${mate?` · del ${seatName(1-S.seat)}`:''}`:'Busta ancora chiusa'}</h3>
   <div class="row">${fl?`<button class="btn" id="flipall">Scopri tutte</button>`:''}${!allOpen?`<button class="btn${fl?'':' pri'}" id="next">Apri busta ${own0+opened+1}</button><button class="btn" id="all">Apri tutte</button>`:''}<button class="btn warm" id="todeck">Costruisci il Mazzo →</button></div></div>
   <div class="pack-grid" id="pgrid"></div>
-  <div class="pool-sum" id="psum"></div>`;
-  const pk=$('#packs');
+  <div class="pool-sum" id="psum"></div>`}`;
+  if(!dr){const pk=$('#packs');
   const promoTile=o=>{if(!S.pool.some(x=>x.p&&(!team||x.o===o)))return;const pr=document.createElement('div');pr.className='pk promo'+(allOpen?' done':'')+(team&&o!==S.seat?' mate':'');pr.textContent='Promo';pk.appendChild(pr)};
   for(let i=0;i<n;i++){
     if(team&&i%(n/2)===0){const o=i?1:0;const l=document.createElement('span');l.className='pklbl';l.textContent=o===S.seat?seatName(o)+' · tu':seatName(o);pk.appendChild(l)}
@@ -1463,15 +1514,15 @@ function renderOpen(){
   $('#next')&&($('#next').onclick=()=>{S.opened++;S.viewB=own0+S.opened-1;FLIP={b:S.viewB,n:0};S._anim=-1;saveS();renderOpen()});
   $('#all')&&($('#all').onclick=()=>{S.opened=nOwn;S.viewB=own0+nOwn-1;FLIP={b:-1,n:0};S._anim=S.viewB;saveS();renderOpen()});
   $('#flipall')&&($('#flipall').onclick=()=>flipNext(true));
-  $('#todeck').onclick=()=>goStep('deck');
+  $('#todeck').onclick=()=>goStep('deck')}
   // r: la lista letta da listPool, per un Pool importato, che va dritto al Mazzo.
   const open_=(code,msg,r)=>{if(r)freshList(r);else freshKit(code);resetGame();commit();FLIP={b:S.viewB,n:0};S._anim=-1;const tm=timerNewKit();if(r)go('deck');else renderOpen();toast(msg+kitName(S.seed)+(tm?' · timer avviato':''))};
   // Un Kit nuovo apre una Sessione nuova: Pool, Mazzo e Match ripartono da zero, e nel Two-Headed Giant anche il Compagno.
   // Prima si avvisa, e se il Mazzo non è salvato si propone di salvarlo (con una finestra dell'app, non con confirm()).
-  const load=(code,msg,r)=>{const n=kitLoss(),match=!!G.me||!!G.match.res;if(!n&&!match&&S.opened<=1&&!(S.team&&MATE)){open_(code,msg,r);return}
+  const load=(code,msg,r)=>{const n=kitLoss(),match=!!G.me||!!G.match.res,started=S.draft?S.draft.round+S.draft.pick>0:S.opened>1;if(!n&&!match&&!started&&!(S.team&&MATE)){open_(code,msg,r);return}
     const toTeam=!!kitTeam(code);
     openModal('Kit nuovo: si riparte da zero',m=>{
-      m.innerHTML=`<p style="margin-top:0">Con un altro Kit si perdono le Buste aperte${n?` e il Mazzo di ${n} carte, che non è salvato`:S.deck.length?' e il Mazzo attuale (lo ritrovi in «Mazzi salvati»)':''}${match?', e il Match sul Tavolo si chiude':''}.${S.team?` ${toTeam?'Anche il tuo Compagno riparte: la sua pagina passa al Kit nuovo e il suo Mazzo si annulla.':'La squadra si scioglie: il tuo Compagno resta sul Kit di adesso, senza di te.'}`:''}</p>
+      m.innerHTML=`<p style="margin-top:0">Con un altro Kit si perdono ${S.draft?'il draft':'le Buste aperte'}${n?` e il Mazzo di ${n} carte, che non è salvato`:S.deck.length?' e il Mazzo attuale (lo ritrovi in «Mazzi salvati»)':''}${match?', e il Match sul Tavolo si chiude':''}.${S.team?` ${toTeam?'Anche il tuo Compagno riparte: la sua pagina passa al Kit nuovo e il suo Mazzo si annulla.':'La squadra si scioglie: il tuo Compagno resta sul Kit di adesso, senza di te.'}`:''}</p>
         <div class="row" style="justify-content:flex-end;gap:8px"><button class="btn" id="kl-no">Annulla</button><button class="btn warm" id="kl-go">${n?'Apri senza salvare':'Apri il Kit nuovo'}</button>${n?'<button class="btn pri" id="kl-save">Salva e apri il Kit</button>':''}</div>`;
       $('#kl-no').onclick=closeModal;
       $('#kl-go').onclick=()=>{closeModal();open_(code,msg,r)};
@@ -1482,6 +1533,8 @@ function renderOpen(){
   el.querySelectorAll('[data-seat]').forEach(b=>b.onclick=()=>{setSeat(+b.dataset.seat);FLIP={b:S.viewB,n:0};S._anim=-1;renderOpen()});
   $('#regen').onclick=()=>{const v=$('#seed').value.trim();if(v)load(v,'Kit caricato: ')};
   $('#implist').onclick=()=>listModal(r=>load(r.code,'Pool importato: ',r));
+  $('#newdraft').onclick=()=>load(newDraftCode(),'Nuovo draft: ');
+  if(dr)paintDraft();
 }
 // Importa lista (issue #30): la lista incollata si legge mentre si scrive, con le carte riconosciute, le righe che restano fuori
 // e gli avvisi. Importare apre una Sessione nuova, con le stesse avvertenze di un Kit nuovo (done).
@@ -1925,6 +1978,45 @@ document.addEventListener('keydown',e=>{if(e.key!=='/'||e.ctrlKey||e.metaKey||e.
   const modal=!$('#modal').hidden;if(modal?!$('#modal').contains(BROOT):VIEW!=='deck')return;
   const inp=BROOT.querySelector?.('.qbar[data-qz=side] .qin');if(!inp?.isConnected)return;e.preventDefault();inp.focus();inp.select()});
 
+/* 46-draft.js */
+// La vista del draft (issue #46), nell'Apertura al posto delle Buste: la Busta da cui scegliere, il timer della scelta e le
+// carte prese, in colonne per colore. A draft finito: il passaggio al Mazzo e i sette Bot, da sfidare sul Tavolo con il loro Mazzo.
+// Il timer dà più tempo con più carte nella Busta, come al tavolo (40 secondi alle prime scelte, 5 alle ultime); allo scadere
+// sceglie il Bot al posto tuo. Si spegne, e la scelta resta in questo browser. Dopo un ricaricamento riparte da capo.
+const PICK_SECS=[0,5,5,5,10,10,15,20,20,25,25,30,35,40,40]; // per carte rimaste nella Busta
+let DRAFT_PREF={timer:true,...LS.get('mtg-lab:draft',{})};
+const setDraftPref=p=>{DRAFT_PREF={...DRAFT_PREF,...p};LS.set('mtg-lab:draft',DRAFT_PREF)};
+let pickEnd=0,pickKey='',DRAFT_BOTS={code:null,bots:[]};
+function draftTake(u){draftStep(u);if(S.draft.done)toast('Draft finito: le tue scelte sono il Pool');renderOpen()}
+// I Mazzi dei Bot si costruiscono una volta per draft.
+const botsOf=()=>{if(DRAFT_BOTS.code!==S.seed)DRAFT_BOTS={code:S.seed,bots:draftBots()};return DRAFT_BOTS.bots};
+// Le carte prese, una colonna per colore come il Sideboard, ordinate per costo.
+function picksHTML(ps){const keys=GROUPS.col.keys.filter(k=>ps.some(x=>groupKey('col',x.c)===k));
+  return `<div class="dpicks">${keys.map(k=>`<div class="dcol"><div class="eyebrow">${GROUPS.col.t[k]} ${ps.filter(x=>groupKey('col',x.c)===k).length}</div>${ps.filter(x=>groupKey('col',x.c)===k).sort(byCost).map(x=>`<div class="hit" data-cid="${x.c}"${x.v?` data-v="${x.v}"`:''}><i class="rar ${BY[x.c].r}"></i><span class="n">${esc(BY[x.c].n)}</span><span>${mana(BY[x.c].f[0].m||'')}</span></div>`).join('')}</div>`).join('')}</div>`}
+const ataSource=()=>ATA_?`<p class="gihsrc muted">I Bot scelgono con l'ATA: <a href="https://www.17lands.com/public_datasets" target="_blank" rel="noopener">Dati 17Lands (CC BY 4.0), aggiornati al ${new Date(ATA_.date+'T12:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})}</a>, Premier Draft, ${ATA_.picks.toLocaleString('it-IT')} scelte.</p>`:'';
+function paintDraft(){const box=$('#draftbox'),d=S.draft;if(!box||!d)return;
+  if(d.done){const bots=botsOf();
+    box.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:12px"><h3 style="font-size:16px">Le tue ${d.picks[0].length} scelte: ${S.pool.length} carte nel Pool, senza le terre base</h3><button class="btn warm" id="dgo">Costruisci il Mazzo →</button></div>
+      <div class="dbots">${bots.map(b=>`<div class="sumbox"><b>Bot del posto ${b.seat}</b> ${[...b.pair].map(k=>`<span class="ms ${k}"></span>`).join('')} <span class="muted">${b.list.length} carte</span><button class="btn sm" data-bot="${b.seat}">Sfida</button></div>`).join('')}</div>
+      ${picksHTML(d.picks[0])}${ataSource()}`;
+    $('#dgo').onclick=()=>goStep('deck');
+    box.querySelectorAll('[data-bot]').forEach(b=>b.onclick=()=>{if(gameOpen()){toast('Prima finisci la Partita in corso');return}
+      newMatch();G.mode='bot';G.match.botSeat=+b.dataset.bot;commit();go('table');nextGameModal()});return}
+  const key=d.code+d.round+'.'+d.pick,left=d.packs[0].length;if(key!==pickKey){pickKey=key;pickEnd=Date.now()+PICK_SECS[Math.min(14,left)]*1000}
+  box.innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:12px"><h3 style="font-size:16px">Busta ${d.round+1} di 3 · scelta ${d.pick+1} di ${d.pick+left} · passa a ${passDir(d.round)>0?'sinistra':'destra'}</h3>
+      <div class="row"><span class="chip timer" id="pickchip"></span><button class="btn sm" id="picktm">${DRAFT_PREF.timer?'Spegni il timer':'Accendi il timer'}</button></div></div>
+    <div class="pack-grid" id="dpack"></div>
+    <h3 style="font-size:16px;margin:16px 0 8px">Le tue scelte (${d.picks[0].length})</h3>${picksHTML(d.picks[0])}${ataSource()}`;
+  const g=$('#dpack');d.packs[0].forEach(x=>{const s=document.createElement('div');s.className='slot pickable';const r=BY[x.c].r;
+    s.innerHTML=`<div class="lbl"><i class="rar ${r}"></i>${slotLabel(x)}</div>`;const f=faceEl(x,{foil:!!x.f});setPreviewAttrs(f,x);f.title='Prendi questa carta';f.onclick=()=>draftTake(x.u);s.appendChild(f);g.appendChild(s)});
+  $('#picktm').onclick=()=>{setDraftPref({timer:!DRAFT_PREF.timer});pickKey='';paintDraft()};paintPick()}
+// Ogni mezzo secondo: il tempo rimasto, e allo scadere la scelta del Bot al posto tuo.
+function paintPick(){const d=S.draft;if(!d||d.done||!DRAFT_PREF.timer){const c=$('#pickchip');if(c){c.textContent='Timer spento';c.className='chip timer'}return}
+  const left=pickEnd-Date.now(),c=$('#pickchip');
+  if(c){c.textContent=timerFmt(Math.max(0,left));c.className='chip timer '+(left<=5000?'bad':left<=10000?'warn':'on')}
+  if(pickEnd&&left<=0){const x=botChoice(d.packs[0],d.picks[0]);toast(`Tempo: il Bot ha preso ${BY[x.c].n} per te`);draftTake(x.u)}}
+function initDraft(){setInterval(paintPick,500)}
+
 /* 50-game.js */
 let G=LS.get('mtg-lab:fra-game-v1',LS.get('fra-game-v1',null))||{mode:'bot',me:null,bot:null,log:[],first:'me'};
 // Il Match sopravvive alle Partite: res = risultati dal mio punto di vista (W/L/D), bot = codice del kit del bot.
@@ -1996,7 +2088,10 @@ function startGame(first,fmt){
   const gn=G.gn=match.res.length+1;roundStart(match);
   log(null,`Partita ${gn} del Match ${match.hg?'Two-Headed Giant (una Partita, 30 vite, primo mulligan gratis)':'al meglio di '+match.bo}${match.res?' ('+scoreText()+')':''}. Mazzo di ${list.length} carte${list.length<40?' (meno di 40!)':''}.`);
   const who1=G.mode==='bot'?(G.first==='me'?'Inizi tu':'Inizia il bot'):(G.first==='me'?'Vai per primo':'Vai per secondo');
-  if(G.mode==='bot'){match.bot=match.bot||'BOT-'+Math.random().toString(36).slice(2,8);const k=makeKit(match.bot);const b=autoBuild(k.pool,GIH_?.w);const byU=byUid(k.pool);
+  // Dopo un draft (issue #46) si può sfidare uno dei sette Bot del tavolo, con il Mazzo costruito dalle sue scelte.
+  const seatBot=G.mode==='bot'&&match.botSeat&&S.draft?.done?draftBots().find(b=>b.seat===match.botSeat):null;
+  if(seatBot){G.bot=mkPlayer(`Bot ${seatBot.pair} · posto ${seatBot.seat}`,seatBot.list);log(null,`Il Bot del posto ${seatBot.seat} del draft gioca <b>${seatBot.pair}</b>. ${who1}${coin?' (lancio della moneta)':''}.`)}
+  else if(G.mode==='bot'){match.bot=match.bot||'BOT-'+Math.random().toString(36).slice(2,8);const k=makeKit(match.bot);const b=autoBuild(k.pool,GIH_?.w);const byU=byUid(k.pool);
     const cids=b.uids.map(u=>byU[u].v?{c:byU[u].c,v:byU[u].v}:{c:byU[u].c});COLORS.forEach(c=>{for(let i=0;i<b.basics[c];i++)cids.push({c:BASIC_ID[c]})});G.bot=mkPlayer('Bot '+b.pair,cids);
     log(null,`${gn===1?'Il bot ha aperto il suo kit e gioca':'Il bot gioca di nuovo'} <b>${b.pair}</b>. ${who1}${coin?' (lancio della moneta)':''}.`)}
   else tableLog(G.mode==='online'?`Inizia la Partita ${gn} e va ${G.first==='me'?'per primo':'per secondo'}${coin?' (moneta)':''}`:who1+(coin?' (lancio della moneta)':'')+'.');
@@ -2813,6 +2908,6 @@ document.addEventListener('keydown',e=>{if(TARGET&&e.key==='Escape'){endTarget()
 
 /* 99-boot.js */
 // Con una Partita aperta si riparte dal Tavolo: l'Apertura e il Mazzo sono bloccati.
-loadPacks();if(gameOpen())go('table');else renderAll();initRoom();initTimer();initRound();
+loadPacks();if(gameOpen())go('table');else renderAll();initRoom();initTimer();initRound();initDraft();
 
 </script>
