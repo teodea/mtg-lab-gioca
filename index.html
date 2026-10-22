@@ -751,9 +751,22 @@ function makeTeamKit(seed,n){
   promos.forEach((x,k)=>{x.u='p'+(u++);x.b=n+k;x.o=k;pool.push(x)});
   return {seed,team:n,boosters,promos,pool};
 }
-// Il codice dice il tipo di Kit: FRA-XXXXX individuale, FRA2-XXXXX di squadra da 8 Buste, FRA2x12-XXXXX da 12.
+// Pool da una lista di carte (issue #30): il codice FRAL- contiene le carte, due caratteri in base 36 per carta, in ordine
+// crescente, così la stessa lista dà lo stesso codice in qualunque ordine sia scritta. Il numero è l'id della carta, quello della
+// variante (che porta con sé la carta base) o 1000 più il numero di una Special Guest. Niente Buste e niente promo.
+const LIST_PRE='FRAL-';
+const isListCode=code=>String(code).toUpperCase().startsWith(LIST_PRE);
+const listTok=x=>x.v?+x.v:BY[x.c].sg?1000+ +x.c.slice(1):+x.c;
+const tokItem=n=>{const id=n>=1000?'g'+(n-1000):String(n),c=BY[id];if(!c||c.r==='t'||/Basic Land/.test(c.t||''))return null;return c.b?{c:c.b,v:id}:{c:id}};
+const listCode=items=>LIST_PRE+items.map(listTok).sort((a,b)=>a-b).map(n=>n.toString(36).toUpperCase().padStart(2,'0')).join('');
+function makeListKit(code){const body=String(code).slice(LIST_PRE.length),pool=[];
+  for(let i=0;i+1<body.length;i+=2){const x=tokItem(parseInt(body.slice(i,i+2),36));if(x)pool.push({...x,u:'p'+pool.length})}
+  return {seed:code,boosters:[],promo:null,pool}}
+// Il nome del Kit nei nomi dei Mazzi, dei file e negli avvisi: il codice, o per un Pool da lista un'etichetta corta.
+const kitName=code=>isListCode(code)?'LISTA-'+hashStr(String(code).toUpperCase()).toString(36).toUpperCase().padStart(5,'0').slice(-5):code;
+// Il codice dice il tipo di Kit: FRA-XXXXX individuale, FRA2-XXXXX di squadra da 8 Buste, FRA2x12-XXXXX da 12, FRAL- da una lista.
 const kitTeam=code=>{const m=/^FRA2(x12)?-/i.exec(code);return m?(m[1]?12:8):0};
-const kitFromCode=code=>{const n=kitTeam(code);return n?makeTeamKit(code,n):makeKit(code)};
+const kitFromCode=code=>{if(isListCode(code))return makeListKit(code);const n=kitTeam(code);return n?makeTeamKit(code,n):makeKit(code)};
 const newSeed=(team=0)=>(team?team===12?'FRA2x12-':'FRA2-':'FRA-')+Math.random().toString(36).slice(2,7).toUpperCase();
 
 /* 20-autobuild.js */
@@ -1188,7 +1201,11 @@ function cleanLay(lay,us){const out={};if(!lay||typeof lay!=='object')return out
 // Two-Headed Giant: team = 8 o 12 Buste (0 per il Kit individuale), seat = il posto scelto, 0 per il Compagno A e 1 per il B.
 // opened conta le Buste aperte tra le proprie; viewB è l'indice della Busta guardata, tra tutte quelle del Kit.
 // at: quando è stato aperto il Kit, per capire chi dei due Compagni ha il Kit più recente; matePeer: l'ultimo Compagno trovato.
-function freshKit(seed){const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null};S.viewB=firstOwn();saveS()}
+function freshKit(seed){const k=kitFromCode(seed);S={seed,team:k.team||0,seat:k.team?S?.seat||0:0,boosters:k.boosters,promo:k.promo||null,pool:k.pool,opened:1,viewB:0,deck:[],lay:null,tc:{},basics:{W:0,U:0,B:0,R:0,G:0},nick:S?.nick||'',at:Date.now(),matePeer:S?.matePeer||null};S.viewB=firstOwn();
+  // Un Pool da lista non ha Buste da aprire: la Sessione parte dalla costruzione.
+  if(!S.boosters.length)S.opened=ownCount();saveS()}
+// Importa lista (issue #30): una Sessione nuova con il Pool della lista, e con il suo Mazzo e le sue terre base se la lista li ha.
+function freshList(r){freshKit(r.code);S.deck=[...r.deck];S.basics={...r.basics};saveS()}
 // Le Buste di chi guarda: tutte nel Kit individuale, metà nel Kit di squadra.
 const ownCount=(s=S)=>s.team?s.team/2:6;
 const firstOwn=(s=S)=>s.team&&s.seat?s.team/2:0;
@@ -1233,7 +1250,7 @@ const deckPart=o=>({seat:o.seat||0,deck:[...o.deck],basics:{...o.basics},lay:JSO
 const findSave=id=>SAVES.find(s=>s.id===id);
 // Senza nome sovrascrive il Mazzo salvato da cui si è partiti; con un nome ne crea uno nuovo.
 function saveDeck(name){syncLay();let s=!name&&findSave(S.saveId);
-  if(!s){s={id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:name||'Mazzo '+S.seed,st:{mw:0,ml:0,gw:0,gl:0}};SAVES.unshift(s)}
+  if(!s){s={id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:name||'Mazzo '+kitName(S.seed),st:{mw:0,ml:0,gw:0,gl:0}};SAVES.unshift(s)}
   Object.assign(s,{ts:Date.now(),seed:S.seed,team:S.team||0,boosters:S.boosters,promo:S.promo,pool:S.pool},deckPart(S));
   S.saveId=s.id;saveS();persistSaves();return s.id}
 function loadDeck(id){const s=findSave(id);if(!s)return;
@@ -1255,6 +1272,12 @@ function exportDeck(id){const s=findSave(id);const {st,...rest}=s;const bytes=ne
 // Le varianti sono la stessa carta FRA (c è la carta base); le Special Guests Forge le ha nel set SPG.
 function forgeDck(name,main,side){const lines=cs=>{const m=new Map();cs.forEach(({c})=>{const k=BY[c].n.split(' // ')[0]+'|'+(BY[c].sg?'SPG':'FRA');m.set(k,(m.get(k)||0)+1)});return [...m].map(([k,n])=>n+' '+k+'\n').join('')};
   return `[metadata]\nName=${String(name).replace(/[\r\n]+/g,' ').trim()}\n[Main]\n${lines(main)}[Sideboard]\n${lines(side)}`}
+// Carte del mazzo come {c, v}: c per le regole, v per l'immagine della variante.
+function deckList(){const byU=byUid(S.pool);const out=S.deck.map(u=>byU[u]).filter(Boolean).map(x=>x.v?{c:x.c,v:x.v}:{c:x.c});COLORS.forEach(k=>{for(let i=0;i<S.basics[k];i++)out.push({c:BASIC_ID[k]})});return out}
+function deckText(){const lines=cs=>{const m={};cs.forEach(({c,v})=>{const n=BY[c].n.split(' // ')[0];const key=BY[c].sg?`${n} (SPG) ${c.slice(1)}`:`${n} (FRA) ${v||c}`;m[key]=(m[key]||0)+1});return Object.entries(m).map(([k,v])=>v+' '+k).join('\n')};
+  const side=sideList();return 'Deck\n'+lines(deckList())+(side.length?'\n\nSideboard\n'+lines(side):'')}
+// Il Sideboard per le liste, nell'ordine delle sue Pile: senza spostamenti a mano è quello della colonna.
+function sideList(){syncLay();const byU=byUid(S.pool);return pileOrder('side').map(u=>byU[u]).filter(Boolean)}
 const okBoosters=b=>Array.isArray(b)&&b.every(p=>Array.isArray(p)&&p.every(x=>x&&BY[x.c]&&(!x.v||BY[x.v])))?b:[];
 // Il testo importato non è fidato: si tengono solo carte che esistono e uid che stanno nel Pool.
 function importDeck(code){const m=/^MTGLAB1:([A-Za-z0-9+/=]+)$/.exec(String(code).trim());if(!m)throw new Error('Codice non valido');
@@ -1263,11 +1286,44 @@ function importDeck(code){const m=/^MTGLAB1:([A-Za-z0-9+/=]+)$/.exec(String(code
   const us=new Set(o.pool.map(x=>x.u));const only=a=>(Array.isArray(a)?a:[]).filter(u=>us.has(u));
   const basics={};COLORS.forEach(k=>basics[k]=Math.max(0,Math.min(60,Math.floor(+o.basics?.[k]||0))));
   const s={id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:String(o.name||'Mazzo importato').slice(0,40),ts:Date.now(),
-    seed:String(o.seed||'').slice(0,24),team:[8,12].includes(o.team)?o.team:0,seat:o.seat===1?1:0,boosters:okBoosters(o.boosters),promo:o.promo&&BY[o.promo.c]?o.promo:null,pool:o.pool,deck:only(o.deck),tc:cleanTc(o.tc,o.pool.length),basics,st:{mw:0,ml:0,gw:0,gl:0}};
+    seed:String(o.seed||'').slice(0,600),team:[8,12].includes(o.team)?o.team:0,seat:o.seat===1?1:0,boosters:okBoosters(o.boosters),promo:o.promo&&BY[o.promo.c]?o.promo:null,pool:o.pool,deck:only(o.deck),tc:cleanTc(o.tc,o.pool.length),basics,st:{mw:0,ml:0,gw:0,gl:0}};
   // Codici di prima delle due zone: il Sideboard scelto e le colonne del Mazzo passano da migrateLay, che controlla i criteri.
   if(o.lay)s.lay=cleanLay(o.lay,us);
   else migrateLay(Object.assign(s,{side:only(o.side),grp:o.grp,cols:Array.isArray(o.cols)?o.cols.map(c=>({k:c?.k??null,u:only(c?.u)})):null}));
   SAVES.unshift(s);persistSaves();return s.id}
+
+// Importa lista (issue #30): il Pool da una lista di carte come la esportano Arena, Moxfield o MTGO («2x Last Gasp»,
+// «1 Loot, the Anomaly (FRA) 232»). Il nome può essere quello intero o della prima faccia. Una carta con varianti è la versione
+// base, salvo una riga con il numero di una variante. Con una sezione del Mazzo (Deck, Mainboard, o le righe prima di tutto)
+// e una Sideboard, le carte della prima vanno nel Mazzo; altrimenti tutte nel Sideboard. Le terre base del Mazzo vanno nei
+// contatori delle terre base, le altre si ignorano. Restituisce {code, pool, deck (uid), basics, unknown (righe), warn}.
+const normName=s=>String(s).toLowerCase().replace(/[’‘`´]/g,"'").replace(/\s+/g,' ').trim();
+let NAME_IX=null;
+function nameIx(){if(NAME_IX)return NAME_IX;NAME_IX=new Map();
+  DATA.filter(c=>c.r!=='t'&&!c.b).forEach(c=>[c.n,c.n.split(' // ')[0],(c.f||[]).map(f=>f.n).join(' // ')].forEach(n=>{const k=normName(n);if(k&&!NAME_IX.has(k))NAME_IX.set(k,c.id)}));
+  return NAME_IX}
+const LIST_SEC={deck:'d',mainboard:'d',main:'d',commander:'d',companion:'d',sideboard:'s',side:'s',about:'x',maybeboard:'x',considering:'x'};
+function listPool(text){const ix=nameIx(),rows=[],unknown=[];let sec='d',hasSide=false,hasDeck=false;
+  for(const raw of String(text).split(/\r?\n/)){const line=raw.trim();if(!line||line.startsWith('//'))continue;
+    const h=/^([a-z]+)\s*:?\s*(\(\d+\))?$/i.exec(line);if(h&&LIST_SEC[h[1].toLowerCase()]){sec=LIST_SEC[h[1].toLowerCase()];continue}
+    if(sec==='x')continue;
+    const m=/^(?:(\d+)x?\s+)?(.+?)(?:\s+\(([a-z0-9]+)\)(?:\s+(\S+))?)?(?:\s+\*[a-z]+\*)*$/i.exec(line);
+    const id=m&&ix.get(normName(m[2]));if(!id){unknown.push(line);continue}
+    rows.push({id,n:m[1]?+m[1]:1,set:(m[3]||'').toUpperCase(),num:m[4]||'',sec});if(sec==='s')hasSide=true;else hasDeck=true}
+  const toDeck=hasDeck&&hasSide,items=[],basics={W:0,U:0,B:0,R:0,G:0};
+  rows.forEach(r=>{const basic=COLORS.find(k=>BY[BASIC_ID[k]].n===BY[r.id].n);
+    if(basic){if(toDeck&&r.sec==='d')basics[basic]+=r.n;return}
+    const v=r.set==='FRA'&&BY[r.num]?.b===r.id?r.num:null;for(let i=0;i<r.n;i++)items.push({c:r.id,...(v?{v}:{}),d:toDeck&&r.sec==='d'})});
+  const code=listCode(items),pool=makeListKit(code).pool,free=new Map();
+  pool.forEach(x=>{const t=listTok(x);if(!free.has(t))free.set(t,[]);free.get(t).push(x.u)});
+  const deck=items.filter(x=>x.d).map(x=>free.get(listTok(x)).shift());
+  return {code,pool,deck,basics,unknown,warn:listWarn(pool)}}
+// Un Pool che un Kit non dà quasi mai: si avvisa ma si importa lo stesso. Un Kit ha al massimo 85 carte (6 Buste da 14 più la
+// promo, senza terre base); su 20.000 Kit del simulatore le rare e mitiche vanno da 7 a 18, più di 15 in meno di 1 Kit su 300.
+function listWarn(pool){const w=[],rm=pool.filter(x=>'rm'.includes(BY[x.c].r)).length;
+  if(pool.length>85)w.push(`${pool.length} carte: un Kit ne ha al massimo 85, terre base escluse`);
+  if(rm>15)w.push(`${rm} rare e mitiche: in un Kit più di 15 capita meno di una volta su 300`);
+  return w}
 
 /* 41-views.js */
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>goStep(b.dataset.view));
@@ -1292,6 +1348,7 @@ function lockedModal(v){const solo=G.mode==='solo',bo3=G.match.bo===3&&!G.match.
 function renderAll(){markTabs();if(VIEW==='open')renderOpen();else if(VIEW==='deck')renderDeck();else renderTable()}
 
 const SLOT_LBL={c:'Comune',sg:'Special Guest',u:'Non comune',cu:'Com./Non com.',e:'Eco',r:'Rara/Mitica',f:'Foil',l:'Terra',k:'Pedina',p:'Promo'};
+const RAR_NAME={m:'Mitica',r:'Rara',u:'Non comune',c:'Comune'};
 const slotLabel=x=>SLOT_LBL[x.s]+(x.v&&BY[x.v].tr?' · '+TR_NAME[BY[x.v].tr]:'')+(x.f&&x.s!=='f'?' · foil':'');
 const KIT_KIND={0:['Kit individuale','Kit prerelease · 6 Play Booster + promo foil'],8:['Two-Headed Giant · 8 Buste','Two-Headed Giant · Kit di squadra · 1 prerelease kit + 2 Play Booster'],12:['Two-Headed Giant · 12 Buste','Two-Headed Giant · Kit di squadra · 2 prerelease kit']};
 const seatName=o=>'Compagno '+'AB'[o];
@@ -1309,12 +1366,14 @@ function renderOpen(){
   const vb=Math.min(S.viewB,n-1);const b=canSee(vb)?S.boosters[vb]:null;const mate=team&&!isOwnBooster(vb);
   const fl=flipping()&&FLIP.b===vb,shown=i=>!fl||i<FLIP.n;
   const range=o=>`Buste ${o*team/2+1}-${(o+1)*team/2}`+(S.pool.some(x=>x.p&&x.o===o)?' e promo':'');
-  el.innerHTML=`<div class="intro"><div><div class="eyebrow">${KIT_KIND[team][1]}</div><h2>${team?'Apri le tue Buste del Kit di squadra':'Apri il tuo Pool di Reality Fracture'}</h2>${team?`<p>Un solo codice per tutta la squadra: dallo al tuo Compagno e scegliete posti diversi. Ognuno apre le sue Buste (${range(0)} al ${seatName(0)}, ${range(1)} al ${seatName(1)}) e poi può rivedere quelle dell'altro. Nel Mazzo usi le carte di cui sei proprietario, e nella scheda Mazzo puoi darne al Compagno. Le Buste seguono la stessa collation del Kit individuale.</p>`:`<p>Ogni kit nasce da un codice: condividilo e il tuo amico otterrà lo stesso identico Pool. Le buste seguono la collation delle Play Booster vere, con le percentuali ufficiali, e le carte escono nell'ordine in cui stanno nella busta: 6 comuni di tutti e 5 i colori, 2 non comuni, 3 carte «eco» (una coppia e la carta vicina sul foglio), la Special Guest in 1 busta su 55, rara o mitica con i trattamenti Shattered Mirror, Sculptor's Stronghold, Braintwister e Portal view, foil, terra e pedina.</p>`}</div>
-  <div class="kitctl"><div class="seg" role="group" aria-label="Tipo di Kit">${[0,8,12].map(k=>`<button data-kind="${k}" aria-pressed="${team===k}">${KIT_KIND[k][0]}</button>`).join('')}</div>
+  // Un Pool da una lista (issue #30) non ha Buste: l'Apertura mostra tutte le sue carte, e si va al Mazzo.
+  const list=!n;
+  el.innerHTML=`<div class="intro"><div><div class="eyebrow">${list?'Pool da una lista · senza Buste e senza promo':KIT_KIND[team][1]}</div><h2>${list?'Il tuo Pool importato':team?'Apri le tue Buste del Kit di squadra':'Apri il tuo Pool di Reality Fracture'}</h2>${list?`<p>${S.pool.length} carte da una lista incollata. Non ci sono Buste da aprire: passa al Mazzo. Il codice qui sotto contiene tutto il Pool: chi lo carica con «Carica codice» ottiene le stesse carte.</p>`:team?`<p>Un solo codice per tutta la squadra: dallo al tuo Compagno e scegliete posti diversi. Ognuno apre le sue Buste (${range(0)} al ${seatName(0)}, ${range(1)} al ${seatName(1)}) e poi può rivedere quelle dell'altro. Nel Mazzo usi le carte di cui sei proprietario, e nella scheda Mazzo puoi darne al Compagno. Le Buste seguono la stessa collation del Kit individuale.</p>`:`<p>Ogni kit nasce da un codice: condividilo e il tuo amico otterrà lo stesso identico Pool. Le buste seguono la collation delle Play Booster vere, con le percentuali ufficiali, e le carte escono nell'ordine in cui stanno nella busta: 6 comuni di tutti e 5 i colori, 2 non comuni, 3 carte «eco» (una coppia e la carta vicina sul foglio), la Special Guest in 1 busta su 55, rara o mitica con i trattamenti Shattered Mirror, Sculptor's Stronghold, Braintwister e Portal view, foil, terra e pedina.</p>`}</div>
+  <div class="kitctl"><div class="seg" role="group" aria-label="Tipo di Kit">${[0,8,12].map(k=>`<button data-kind="${k}" aria-pressed="${!list&&team===k}">${KIT_KIND[k][0]}</button>`).join('')}</div>
   ${team?`<div class="seg" role="group" aria-label="Il tuo posto">${[0,1].map(o=>`<button data-seat="${o}" aria-pressed="${S.seat===o}"${inOpening()?'':` disabled title="Il posto si sceglie durante l'Apertura: per cambiarlo ricarica il codice del Kit"`}>${seatName(o)} · ${range(o)}</button>`).join('')}</div>`:''}
-  <div class="row"><input type="text" id="seed" value="${esc(S.seed)}" aria-label="Codice kit" size="13" class="mono"><button class="btn" id="regen">Carica codice</button><button class="btn pri" id="newkit">Nuovo kit</button></div></div></div>
+  <div class="row"><input type="text" id="seed" value="${esc(S.seed)}" aria-label="Codice kit" size="13" class="mono"><button class="btn" id="regen">Carica codice</button><button class="btn" id="implist" title="Il Pool da una lista di carte di Arena, Moxfield o MTGO">Importa lista…</button><button class="btn pri" id="newkit">Nuovo kit</button></div></div></div>
   <div class="packs" id="packs"></div>
-  <div class="row" style="justify-content:space-between;margin-bottom:12px"><h3 style="font-size:16px">${b?`Busta ${vb+1}${mate?` · del ${seatName(1-S.seat)}`:''}`:'Busta ancora chiusa'}</h3>
+  <div class="row" style="justify-content:space-between;margin-bottom:12px"><h3 style="font-size:16px">${list?`Il Pool · ${S.pool.length} carte`:b?`Busta ${vb+1}${mate?` · del ${seatName(1-S.seat)}`:''}`:'Busta ancora chiusa'}</h3>
   <div class="row">${fl?`<button class="btn" id="flipall">Scopri tutte</button>`:''}${!allOpen?`<button class="btn${fl?'':' pri'}" id="next">Apri busta ${own0+opened+1}</button><button class="btn" id="all">Apri tutte</button>`:''}<button class="btn warm" id="todeck">Costruisci il Mazzo →</button></div></div>
   <div class="pack-grid" id="pgrid"></div>
   <div class="pool-sum" id="psum"></div>`;
@@ -1327,7 +1386,10 @@ function renderOpen(){
     if(team&&(i+1)%(n/2)===0)promoTile(i<n/2?0:1)}
   if(!team)promoTile(0);
   const g=$('#pgrid');
-  if(b){b.forEach((x,i)=>{const s=document.createElement('div');
+  // Il Pool da lista si stende per colore e costo, come il Sideboard.
+  if(list){const ord=GROUPS.col.keys;[...S.pool].sort((a,c)=>ord.indexOf(groupKey('col',a.c))-ord.indexOf(groupKey('col',c.c))||byCost(a,c)).forEach(x=>{const s=document.createElement('div');s.className='slot';const r=BY[x.c].r;
+    s.innerHTML=`<div class="lbl"><i class="rar ${r}"></i>${BY[x.c].sg?'Special Guest':RAR_NAME[r]}${x.v&&BY[x.v].tr?' · '+TR_NAME[BY[x.v].tr]:''}</div>`;const f=faceEl(x);setPreviewAttrs(f,x);s.appendChild(f);g.appendChild(s)})}
+  else if(b){b.forEach((x,i)=>{const s=document.createElement('div');
     // Durante lo sfoglio si anima solo la carta appena girata; senza sfoglio tutte, una dopo l'altra.
     const just=fl||FLIP.b===vb?S._anim===vb&&i===FLIP.n-1:S._anim===vb;
     s.className='slot'+(just?' reveal':'')+(just&&FLIP.b===vb&&'rm'.includes(BY[x.c].r)?' hit-'+BY[x.c].r:'');s.style.setProperty('--i',FLIP.b===vb?0:i);
@@ -1339,7 +1401,7 @@ function renderOpen(){
   S._anim=-1;
   // Riepilogo delle proprie carte aperte; con tutte aperte, anche le rare del Compagno.
   const down=new Set(flipping()?S.boosters[FLIP.b].slice(FLIP.n).map(x=>x.u):[]);
-  const mine=openedPool();const seen=mine.filter(x=>(x.p?allOpen:x.b-own0<opened)&&!down.has(x.u));
+  const mine=openedPool();const seen=mine.filter(x=>list||(x.p?allOpen:x.b-own0<opened)&&!down.has(x.u));
   const rank=(a,b)=>'mr'.indexOf(BY[a.c].r)-'mr'.indexOf(BY[b.c].r);const isHit=x=>'rm'.includes(BY[x.c].r);
   const hits=seen.filter(isHit).sort(rank);const mateHits=team&&allOpen?S.pool.filter(x=>x.o!==S.seat&&isHit(x)).sort(rank):[];
   const hit=(x,note)=>`<div class="hit" data-cid="${x.c}"${x.v?` data-v="${x.v}"`:''}><i class="rar ${BY[x.c].r}"></i><span class="n">${esc(BY[x.c].n)}${x.p?' <span class="muted">(promo)</span>':''}${note?` <span class="muted">(${note})</span>`:''}</span><span>${mana(BY[x.c].f[0].m||'')}</span></div>`;
@@ -1350,23 +1412,37 @@ function renderOpen(){
   $('#all')&&($('#all').onclick=()=>{S.opened=nOwn;S.viewB=own0+nOwn-1;FLIP={b:-1,n:0};S._anim=S.viewB;saveS();renderOpen()});
   $('#flipall')&&($('#flipall').onclick=()=>flipNext(true));
   $('#todeck').onclick=()=>goStep('deck');
-  const open_=(code,msg)=>{freshKit(code);resetGame();commit();FLIP={b:S.viewB,n:0};S._anim=-1;const tm=timerNewKit();renderOpen();toast(msg+S.seed+(tm?' · timer avviato':''))};
+  // r: la lista letta da listPool, per un Pool importato, che va dritto al Mazzo.
+  const open_=(code,msg,r)=>{if(r)freshList(r);else freshKit(code);resetGame();commit();FLIP={b:S.viewB,n:0};S._anim=-1;const tm=timerNewKit();if(r)go('deck');else renderOpen();toast(msg+kitName(S.seed)+(tm?' · timer avviato':''))};
   // Un Kit nuovo apre una Sessione nuova: Pool, Mazzo e Match ripartono da zero, e nel Two-Headed Giant anche il Compagno.
   // Prima si avvisa, e se il Mazzo non è salvato si propone di salvarlo (con una finestra dell'app, non con confirm()).
-  const load=(code,msg)=>{const n=kitLoss(),match=!!G.me||!!G.match.res;if(!n&&!match&&S.opened<=1&&!(S.team&&MATE)){open_(code,msg);return}
+  const load=(code,msg,r)=>{const n=kitLoss(),match=!!G.me||!!G.match.res;if(!n&&!match&&S.opened<=1&&!(S.team&&MATE)){open_(code,msg,r);return}
     const toTeam=!!kitTeam(code);
     openModal('Kit nuovo: si riparte da zero',m=>{
       m.innerHTML=`<p style="margin-top:0">Con un altro Kit si perdono le Buste aperte${n?` e il Mazzo di ${n} carte, che non è salvato`:S.deck.length?' e il Mazzo attuale (lo ritrovi in «Mazzi salvati»)':''}${match?', e il Match sul Tavolo si chiude':''}.${S.team?` ${toTeam?'Anche il tuo Compagno riparte: la sua pagina passa al Kit nuovo e il suo Mazzo si annulla.':'La squadra si scioglie: il tuo Compagno resta sul Kit di adesso, senza di te.'}`:''}</p>
         <div class="row" style="justify-content:flex-end;gap:8px"><button class="btn" id="kl-no">Annulla</button><button class="btn warm" id="kl-go">${n?'Apri senza salvare':'Apri il Kit nuovo'}</button>${n?'<button class="btn pri" id="kl-save">Salva e apri il Kit</button>':''}</div>`;
       $('#kl-no').onclick=closeModal;
-      $('#kl-go').onclick=()=>{closeModal();open_(code,msg)};
-      $('#kl-save')&&($('#kl-save').onclick=()=>{saveDeck();closeModal();open_(code,msg)})})};
+      $('#kl-go').onclick=()=>{closeModal();open_(code,msg,r)};
+      $('#kl-save')&&($('#kl-save').onclick=()=>{saveDeck();closeModal();open_(code,msg,r)})})};
   publish();
   $('#newkit').onclick=()=>load(newSeed(team),'Nuovo kit: ');
   el.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{if(+b.dataset.kind!==team)load(newSeed(+b.dataset.kind),'Nuovo kit: ')});
   el.querySelectorAll('[data-seat]').forEach(b=>b.onclick=()=>{setSeat(+b.dataset.seat);FLIP={b:S.viewB,n:0};S._anim=-1;renderOpen()});
   $('#regen').onclick=()=>{const v=$('#seed').value.trim();if(v)load(v,'Kit caricato: ')};
+  $('#implist').onclick=()=>listModal(r=>load(r.code,'Pool importato: ',r));
 }
+// Importa lista (issue #30): la lista incollata si legge mentre si scrive, con le carte riconosciute, le righe che restano fuori
+// e gli avvisi. Importare apre una Sessione nuova, con le stesse avvertenze di un Kit nuovo (done).
+function listModal(done){openModal('Importa una lista di carte',m=>{
+  m.innerHTML=`<p style="margin-top:0">Incolla il Pool come lo esportano Arena, Moxfield o MTGO, una carta per riga: «2x Last Gasp», «1 Loot, the Anomaly (FRA) 232». Se la lista ha le sezioni Deck e Sideboard, le carte del Deck e le sue terre base vanno nel Mazzo; altrimenti tutto va nel Sideboard. Il Pool non ha Buste né promo.</p>
+    <textarea id="lsin" rows="12" style="width:100%" spellcheck="false" placeholder="Deck&#10;2 Last Gasp (FRA) 56&#10;1 Loot, the Anomaly (FRA) 232&#10;&#10;Sideboard&#10;1 Campus Crier (FRA) 4"></textarea>
+    <div id="lsout" style="margin:10px 0"></div><div class="row" style="justify-content:flex-end;gap:8px"><button class="btn" id="ls-no">Annulla</button><button class="btn pri" id="ls-go" disabled>Importa</button></div>`;
+  let r=null;const upd=()=>{const t=$('#lsin').value;r=t.trim()?listPool(t):null;const ok=!!r?.pool.length;$('#ls-go').disabled=!ok;
+    if(!r){$('#lsout').innerHTML='';return}const nb=Object.values(r.basics).reduce((a,c)=>a+c,0);
+    $('#lsout').innerHTML=`<p style="margin:0">${ok?`${r.pool.length} carte riconosciute${r.deck.length?`: ${r.deck.length} nel Mazzo${nb?` con ${nb} terre base`:''} e ${r.pool.length-r.deck.length} nel Sideboard`:', tutte nel Sideboard'}.`:'Nessuna carta di Reality Fracture riconosciuta.'}</p>`+
+      r.warn.map(w=>`<p class="chip warn" style="margin:6px 0 0">${esc(w)}</p>`).join('')+
+      (r.unknown.length?`<p class="muted" style="margin:6px 0 0">Non riconosciute, restano fuori (${r.unknown.length}): ${r.unknown.slice(0,12).map(esc).join(' · ')}${r.unknown.length>12?' …':''}</p>`:'')};
+  $('#lsin').oninput=upd;$('#ls-no').onclick=closeModal;$('#ls-go').onclick=()=>{if(!r?.pool.length)return;closeModal();done(r)};$('#lsin').focus()})}
 
 /* deck builder */
 const poolByU=()=>byUid(S.pool);
@@ -1565,24 +1641,18 @@ document.addEventListener('pointerup',e=>{if(!deckDrag)return;const d=deckDrag;d
 document.addEventListener('pointercancel',()=>{if(deckDrag){const d=deckDrag;deckDrag=null;clearTimeout(d.hold);d.ghost&&d.ghost.remove();d.root.classList.remove('zdrag');ZREDRAW()}});
 // Il clic che segue un trascinamento non deve anche spostare la carta.
 document.addEventListener('click',e=>{if(deckDropped){deckDropped=false;e.stopPropagation();e.preventDefault()}},true);
-// Carte del mazzo come {c, v}: c per le regole, v per l'immagine della variante.
-function deckList(){const byU=poolByU();const out=S.deck.map(u=>byU[u]).filter(Boolean).map(x=>x.v?{c:x.c,v:x.v}:{c:x.c});COLORS.forEach(k=>{for(let i=0;i<S.basics[k];i++)out.push({c:BASIC_ID[k]})});return out}
-function deckText(){const lines=cs=>{const m={};cs.forEach(({c})=>{const n=BY[c].n.split(' // ')[0];const key=BY[c].sg?`${n} (SPG) ${c.slice(1)}`:`${n} (FRA) ${c}`;m[key]=(m[key]||0)+1});return Object.entries(m).map(([k,v])=>v+' '+k).join('\n')};
-  const side=sideList();return 'Deck\n'+lines(deckList())+(side.length?'\n\nSideboard\n'+lines(side):'')}
-// Il Sideboard per le liste, nell'ordine delle sue Pile: senza spostamenti a mano è quello della colonna.
-function sideList(){syncLay();const byU=poolByU();return pileOrder('side').map(u=>byU[u]).filter(Boolean)}
 // Colori del Mazzo (dalle carte non terra), per riconoscere i salvataggi a colpo d'occhio.
 function deckColors(pool,deck){const byU=byUid(pool);const k=new Set();deck.forEach(u=>{const x=byU[u];if(x&&!isLand(x.c))[...BY[x.c].c].forEach(c=>k.add(c))});return COLORS.filter(c=>k.has(c))}
 function savesModal(){let armed=null;
   openModal('Mazzi salvati',m=>{const draw_=()=>{const cur=findSave(S.saveId);const dirty=S.deck.length&&deckDirty();
     m.innerHTML=`<p class="muted" style="margin:0;font-size:12.5px">Un Mazzo salvato conserva il Pool, il Mazzo, le terre base e come hai disposto le Pile: puoi ricaricarlo quando vuoi e provarne più versioni. Resta in questo browser; per portarlo altrove usa «Esporta».</p>
-      <div class="row"><input type="text" id="svname" maxlength="40" placeholder="Nome (es. UG tempo v2)" value="${esc(cur?cur.name+' (copia)':deckColors(S.pool,S.deck).join('')+' '+S.seed)}"><button class="btn pri" id="svnew">Salva come nuovo</button>${cur?`<button class="btn" id="svover">Sovrascrivi «${esc(cur.name)}»</button>`:''}</div>
+      <div class="row"><input type="text" id="svname" maxlength="40" placeholder="Nome (es. UG tempo v2)" value="${esc(cur?cur.name+' (copia)':deckColors(S.pool,S.deck).join('')+' '+kitName(S.seed))}"><button class="btn pri" id="svnew">Salva come nuovo</button>${cur?`<button class="btn" id="svover">Sovrascrivi «${esc(cur.name)}»</button>`:''}</div>
       <div class="saves" id="svlist"></div>
       <details><summary class="muted">Importa un Mazzo da un codice</summary><div class="row" style="margin-top:8px"><textarea id="svcode" rows="3" style="flex:1;min-width:0" placeholder="MTGLAB1:…"></textarea><button class="btn" id="svimp">Importa</button></div></details>`;
     const L=$('#svlist');if(!SAVES.length)L.innerHTML='<div class="nog" style="margin:0">Nessun Mazzo salvato.</div>';
     SAVES.forEach(s=>{const r=document.createElement('div');r.className='saverow'+(s.id===S.saveId?' cur':'');const nb=COLORS.reduce((a,k)=>a+(s.basics[k]||0),0);const st=s.st;
       r.innerHTML=`<div class="sv1"><b>${esc(s.name)}</b> ${deckColors(s.pool,s.deck).map(k=>`<span class="ms ${k}"></span>`).join('')}${s.id===S.saveId?' <span class="chip on">in uso</span>':''}</div>
-        <div class="sv2 muted">${s.deck.length+nb} carte · Sideboard ${sideboard(s).length} · kit ${esc(s.seed)}${s.team?' · '+seatName(s.seat||0):''} · ${new Date(s.ts).toLocaleString('it-IT',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}${st.mw+st.ml?` · Match ${st.mw}-${st.ml} (Partite ${st.gw}-${st.gl})`:''}</div>
+        <div class="sv2 muted">${s.deck.length+nb} carte · Sideboard ${sideboard(s).length} · kit ${esc(kitName(s.seed))}${s.team?' · '+seatName(s.seat||0):''} · ${new Date(s.ts).toLocaleString('it-IT',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}${st.mw+st.ml?` · Match ${st.mw}-${st.ml} (Partite ${st.gw}-${st.gl})`:''}</div>
         <div class="row"></div>`;
       const acts=r.querySelector('.row');const B=(l,f,cls='')=>{const b=document.createElement('button');b.className='btn sm '+cls;b.textContent=l;b.onclick=f;acts.appendChild(b)};
       const loadKey='load'+s.id,delKey='del'+s.id;
@@ -1590,13 +1660,13 @@ function savesModal(){let armed=null;
       B('Esporta',()=>{const code=exportDeck(s.id);try{navigator.clipboard.writeText(code).then(()=>toast('Codice copiato'),()=>{})}catch(e){}$('#svcode').value=code;m.querySelector('details').open=true;$('#svcode').select()});
       B(armed===delKey?'Elimina davvero':'Elimina',()=>{if(armed!==delKey){armed=delKey;draw_();return}deleteDeck(s.id);armed=null;draw_()},armed===delKey?'warm':'');
       L.appendChild(r)});
-    $('#svnew').onclick=()=>{const n=$('#svname').value.trim()||'Mazzo '+S.seed;saveDeck(n);toast('Salvato: '+n);draw_()};
+    $('#svnew').onclick=()=>{const n=$('#svname').value.trim()||'Mazzo '+kitName(S.seed);saveDeck(n);toast('Salvato: '+n);draw_()};
     $('#svover')&&($('#svover').onclick=()=>{saveDeck();toast('Salvato: '+findSave(S.saveId).name);draw_()});
     $('#svimp').onclick=()=>{try{importDeck($('#svcode').value);toast('Mazzo importato');draw_()}catch(e){toast('Codice non valido')}}};
   draw_()},()=>{if(VIEW==='deck')renderDeck()})}
 // Il Mazzo per Forge: file .dck da scaricare, o il testo da copiare.
 function forgeModal(){const cur=findSave(S.saveId);
-  const name=cur?cur.name:(deckColors(S.pool,S.deck).join('')+' '+S.seed).trim();const base=name.replace(/[\\/:*?"<>|]+/g,' ').trim()||'Mazzo';
+  const name=cur?cur.name:(deckColors(S.pool,S.deck).join('')+' '+kitName(S.seed)).trim();const base=name.replace(/[\\/:*?"<>|]+/g,' ').trim()||'Mazzo';
   const t=forgeDck(name,deckList(),sideList());
   openModal('Esporta per Forge',m=>{m.innerHTML=`<p class="muted" style="margin-top:0;font-size:12.5px">Mazzo e Sideboard nel formato di Forge. Reality Fracture c'è solo nelle <b>daily snapshot</b> di Forge, non ancora nella versione stabile; le carte che Forge non ha ancora vengono saltate.</p>
     <ol class="muted" style="font-size:12.5px;padding-left:18px"><li>Salva il file in <code>%APPDATA%\\Forge\\decks\\constructed</code> (su Windows).</li><li>In Forge, nelle Preferenze, disattiva <b>Conformità del mazzo</b> (Deck Conformance): altrimenti vuole almeno 60 carte.</li><li>Scegli il Mazzo in una partita Constructed, contro l'IA o in rete.</li></ol>
