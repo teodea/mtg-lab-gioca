@@ -269,6 +269,10 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .mscore{font:600 12.5px var(--mono);letter-spacing:.02em;padding:4px 9px;border-radius:6px;background:var(--surface2);border:1px solid var(--line)}
 .mscore.won{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 .mscore.lost{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.histhead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.hlist{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.hrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12.5px}.hrow .mscore{font-size:11px;padding:2px 7px}
+.mform{display:flex;flex-direction:column;gap:8px}.mform label{display:flex;gap:8px;align-items:center}
 .dupbox{gap:10px;padding:8px 12px;margin:0 0 10px;border:1px solid color-mix(in srgb,var(--prism) 40%,var(--line));border-radius:8px;background:var(--felt2);font-size:13px}
 .dupbox[hidden]{display:none}
 .cmpcols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
@@ -1282,6 +1286,28 @@ function deckDirty(){syncLay();const s=findSave(S.saveId);return !s||JSON.string
 function kitLoss(){const n=S.deck.length+Object.values(S.basics||{}).reduce((a,b)=>a+b,0);return n&&deckDirty()?n:0}
 // s: punteggio di un Match finito (matchScore); sign -1 quando si annulla.
 function deckStat(id,s,sign){const d=findSave(id);if(!d)return;const t=d.st,k=s.won?'mw':s.drawn?'md':'ml';t[k]=(t[k]||0)+sign;t.gw+=sign*s.w;t.gl+=sign*s.l;persistSaves()}
+// Storico dei Match (issue #42): ogni Match finito contro il Bot o l'amico, e quelli giocati altrove aggiunti a mano.
+// Una riga è {id, ts, mode ('bot', 'online' o 'altrove'), opp, fmt, deck (id del Mazzo salvato), seed, games: [{r, first}], res, where}:
+// r è W, L o D, first chi ha iniziato la Partita ('me' o 'opp'), res il risultato del Match. Sta in questo browser, come i Mazzi.
+let HIST=LS.get('mtg-lab:fra-match-v1',[]);
+const persistHist=()=>LS.set('mtg-lab:fra-match-v1',HIST);
+const histId=()=>'h'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+function histAdd(e){HIST.unshift(e);persistHist();return e.id}
+function histDel(id){HIST=HIST.filter(e=>e.id!==id);persistHist()}
+const histOf=deckId=>HIST.filter(e=>e.deck===deckId);
+// Partite vinte, perse e pareggiate andando per primi e per secondi.
+function firstStats(list){const out={first:{w:0,l:0,d:0},second:{w:0,l:0,d:0}};
+  list.forEach(e=>e.games.forEach(g=>{const s=out[g.first==='me'?'first':'second'];s[g.r==='W'?'w':g.r==='L'?'l':'d']++}));return out}
+// Il punteggio di un Match giocato altrove: se nessuno è arrivato alle vittorie che servono, è chiuso con quello che ha.
+const manualScore=e=>{const res=e.games.map(g=>g.r).join(''),bo=e.fmt==='Bo3'?3:1,s=matchScore(res,bo);return s.over?s:matchScore(res+'C',bo)};
+// Un Match giocato fuori da mtg-lab (phase.rs, il prerelease vero): conta nelle statistiche del suo Mazzo come gli altri.
+function addManualMatch({deck,opp,fmt,games,where}){const e={id:histId(),ts:Date.now(),mode:'altrove',opp:String(opp||'').slice(0,40)||'Avversario',
+  fmt:fmt==='Bo3'?'Bo3':fmt==='2HG'?'2HG':'Bo1',deck:deck||null,seed:findSave(deck)?.seed||'',games:games.filter(g=>/^[WLD]$/.test(g.r)).map(g=>({r:g.r,first:g.first==='opp'?'opp':'me'})),where:String(where||'').slice(0,40)};
+  const s=manualScore(e);e.res=s.won?'W':s.drawn?'D':'L';deckStat(e.deck,s,1);return histAdd(e)}
+function deleteManualMatch(id){const e=HIST.find(x=>x.id===id);if(!e||e.mode!=='altrove')return;deckStat(e.deck,manualScore(e),-1);histDel(id)}
+// Lo storico come testo, una riga per Match.
+function histText(list){const R={W:'vinto',L:'perso',D:'pareggiato'};
+  return list.map(e=>`${new Date(e.ts).toLocaleDateString('it-IT')} · ${e.fmt} contro ${e.opp}${e.where?' · '+e.where:''} · Match ${R[e.res]} · ${e.games.map(g=>g.r+(g.first==='me'?' (primo)':' (secondo)')).join(', ')}${findSave(e.deck)?' · Mazzo '+findSave(e.deck).name:''}`).join('\n')}
 function exportDeck(id){const s=findSave(id);const {st,...rest}=s;const bytes=new TextEncoder().encode(JSON.stringify(rest));
   let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));return 'MTGLAB1:'+btoa(bin)}
 // Il Mazzo come file .dck di Forge: una riga «N Nome|SET» per carta, con il nome della prima faccia come nel set di Forge.
@@ -1660,12 +1686,18 @@ document.addEventListener('pointercancel',()=>{if(deckDrag){const d=deckDrag;dec
 document.addEventListener('click',e=>{if(deckDropped){deckDropped=false;e.stopPropagation();e.preventDefault()}},true);
 // Colori del Mazzo (dalle carte non terra), per riconoscere i salvataggi a colpo d'occhio.
 function deckColors(pool,deck){const byU=byUid(pool);const k=new Set();deck.forEach(u=>{const x=byU[u];if(x&&!isLand(x.c))[...BY[x.c].c].forEach(c=>k.add(c))});return COLORS.filter(c=>k.has(c))}
-function savesModal(){let armed=null;
+function savesModal(){let armed=null;const openH=new Set();
   openModal('Mazzi salvati',m=>{const draw_=()=>{const cur=findSave(S.saveId);const dirty=S.deck.length&&deckDirty();
     m.innerHTML=`<p class="muted" style="margin:0;font-size:12.5px">Un Mazzo salvato conserva il Pool, il Mazzo, le terre base e come hai disposto le Pile: puoi ricaricarlo quando vuoi e provarne più versioni. Resta in questo browser; per portarlo altrove usa «Esporta».</p>
       <div class="row"><input type="text" id="svname" maxlength="40" placeholder="Nome (es. UG tempo v2)" value="${esc(cur?cur.name+' (copia)':deckColors(S.pool,S.deck).join('')+' '+kitName(S.seed))}"><button class="btn pri" id="svnew">Salva come nuovo</button>${cur?`<button class="btn" id="svover">Sovrascrivi «${esc(cur.name)}»</button>`:''}</div>
+      <div class="histhead" id="svhist"></div>
       <div class="saves" id="svlist"></div>
       <details><summary class="muted">Importa un Mazzo da un codice</summary><div class="row" style="margin-top:8px"><textarea id="svcode" rows="3" style="flex:1;min-width:0" placeholder="MTGLAB1:…"></textarea><button class="btn" id="svimp">Importa</button></div></details>`;
+    // Storico dei Match (issue #42): i totali per primi e per secondi, l'aggiunta di un Match giocato altrove, l'esportazione.
+    const fs=firstStats(HIST),pct=x=>`${x.w}-${x.l}${x.d?'-'+x.d:''}`;
+    $('#svhist').innerHTML=`<span class="muted">${HIST.length?`Storico: ${HIST.length} Match · Partite andando per primi ${pct(fs.first)}, per secondi ${pct(fs.second)}`:'Storico dei Match vuoto: ci entrano i Match finiti contro il Bot o l’amico.'}</span>
+      <button class="btn sm" id="svadd">Aggiungi un Match giocato altrove</button>${HIST.length?'<button class="btn sm" id="svhx">Esporta lo storico</button>':''}`;
+    $('#svadd').onclick=()=>matchFormModal(savesModal);$('#svhx')&&($('#svhx').onclick=()=>showText(histText(HIST),'Storico dei Match'));
     const L=$('#svlist');if(!SAVES.length)L.innerHTML='<div class="nog" style="margin:0">Nessun Mazzo salvato.</div>';
     SAVES.forEach(s=>{const r=document.createElement('div');r.className='saverow'+(s.id===S.saveId?' cur':'');const nb=COLORS.reduce((a,k)=>a+(s.basics[k]||0),0);const st=s.st;
       r.innerHTML=`<div class="sv1"><b>${esc(s.name)}</b> ${deckColors(s.pool,s.deck).map(k=>`<span class="ms ${k}"></span>`).join('')}${s.id===S.saveId?' <span class="chip on">in uso</span>':''}</div>
@@ -1675,12 +1707,39 @@ function savesModal(){let armed=null;
       const loadKey='load'+s.id,delKey='del'+s.id;
       if(s.id!==S.saveId||deckDirty())B(armed===loadKey?'Sostituisci il Mazzo attuale?':'Carica',()=>{if(dirty&&armed!==loadKey){armed=loadKey;draw_();return}const other=s.seed!==S.seed;loadDeck(s.id);if(other){resetGame();commit()}closeModal();renderAll();toast('Caricato: '+s.name+(other?' · il Match riparte da zero':''))},armed===loadKey?'warm':'');
       B('Esporta',()=>{const code=exportDeck(s.id);try{navigator.clipboard.writeText(code).then(()=>toast('Codice copiato'),()=>{})}catch(e){}$('#svcode').value=code;m.querySelector('details').open=true;$('#svcode').select()});
+      const hs=histOf(s.id);if(hs.length)B(`Storico (${hs.length})`,()=>{openH.has(s.id)?openH.delete(s.id):openH.add(s.id);draw_()});
       B(armed===delKey?'Elimina davvero':'Elimina',()=>{if(armed!==delKey){armed=delKey;draw_();return}deleteDeck(s.id);armed=null;draw_()},armed===delKey?'warm':'');
+      if(openH.has(s.id))r.appendChild(histList(hs,draw_));
       L.appendChild(r)});
     $('#svnew').onclick=()=>{const n=$('#svname').value.trim()||'Mazzo '+kitName(S.seed);saveDeck(n);toast('Salvato: '+n);draw_()};
     $('#svover')&&($('#svover').onclick=()=>{saveDeck();toast('Salvato: '+findSave(S.saveId).name);draw_()});
     $('#svimp').onclick=()=>{try{importDeck($('#svcode').value);toast('Mazzo importato');draw_()}catch(e){toast('Codice non valido')}}};
   draw_()},()=>{if(VIEW==='deck')renderDeck()})}
+// I Match di un Mazzo nello storico, dal più recente; quelli giocati altrove si possono togliere.
+function histList(list,redraw){const R={W:'Vinto',L:'Perso',D:'Pareggiato'},el=document.createElement('div');el.className='hlist';
+  el.innerHTML=list.map(e=>`<div class="hrow"><span class="mscore ${e.res==='W'?'won':e.res==='L'?'lost':'drawn'}">${R[e.res]}</span>
+    <span>${new Date(e.ts).toLocaleDateString('it-IT',{day:'numeric',month:'numeric'})} · ${esc(e.fmt)} contro ${esc(e.opp)}${e.mode==='altrove'?` · ${esc(e.where||'altrove')}`:e.mode==='bot'?'':' · online'}</span>
+    <span class="mono muted">${e.games.map(g=>`${g.r}<sub>${g.first==='me'?'1°':'2°'}</sub>`).join(' ')}</span>${e.mode==='altrove'?`<button class="btn sm" data-hdel="${e.id}">Togli</button>`:''}</div>`).join('');
+  el.querySelectorAll('[data-hdel]').forEach(b=>b.onclick=()=>{deleteManualMatch(b.dataset.hdel);redraw()});return el}
+// Un Match giocato fuori da mtg-lab (issue #42): Mazzo, avversario, dove, formato e, per ogni Partita, risultato e chi ha iniziato.
+function matchFormModal(back){let fmt='Bo3';const games=[{r:'W',first:'me'}];
+  openModal('Aggiungi un Match giocato altrove',m=>{const draw_=()=>{const seg=(attr,opts,val)=>`<div class="seg">${opts.map(([k,l])=>`<button ${attr}="${k}" aria-pressed="${val===k}">${l}</button>`).join('')}</div>`;
+    m.innerHTML=`<p class="muted" style="margin-top:0;font-size:12.5px">Per esempio una Partita su phase-rs.dev o il prerelease al negozio. Il Match conta nelle statistiche del Mazzo come quelli giocati qui.</p>
+      <div class="mform"><label>Mazzo <select id="mfdeck">${SAVES.map(s=>`<option value="${s.id}"${s.id===S.saveId?' selected':''}>${esc(s.name)}</option>`).join('')}<option value="">Nessun Mazzo salvato</option></select></label>
+      <label>Avversario <input type="text" id="mfopp" maxlength="40" placeholder="Nome"></label><label>Dove <input type="text" id="mfwhere" maxlength="40" value="Prerelease"></label>
+      <div class="row"><span class="eyebrow">Formato</span>${seg('data-mf',[['Bo1','Bo1'],['Bo3','Bo3'],['2HG','2HG']],fmt)}</div>
+      ${games.map((g,i)=>`<div class="row"><span class="eyebrow">Partita ${i+1}</span>${seg(`data-gr="${i}" data-v`,[['W','Vinta'],['L','Persa'],['D','Pari']],g.r)}${seg(`data-gf="${i}" data-v`,[['me','Ho iniziato io'],['opp','Ha iniziato l’altro']],g.first)}</div>`).join('')}
+      <div class="row">${games.length<5?'<button class="btn sm" id="mfplus">+ Partita</button>':''}${games.length>1?'<button class="btn sm" id="mfminus">− Partita</button>':''}</div></div>
+      <div class="row mfoot"><button class="btn" id="mfno">Annulla</button><button class="btn pri" id="mfok">Aggiungi</button></div>`;
+    const keep=()=>({deck:$('#mfdeck').value,opp:$('#mfopp').value,where:$('#mfwhere').value});let kept=null;
+    const redraw=()=>{kept=keep();draw_();$('#mfdeck').value=kept.deck;$('#mfopp').value=kept.opp;$('#mfwhere').value=kept.where};
+    m.querySelectorAll('[data-mf]').forEach(b=>b.onclick=()=>{fmt=b.dataset.mf;redraw()});
+    m.querySelectorAll('[data-gr]').forEach(b=>b.onclick=()=>{games[+b.dataset.gr].r=b.dataset.v;redraw()});
+    m.querySelectorAll('[data-gf]').forEach(b=>b.onclick=()=>{games[+b.dataset.gf].first=b.dataset.v;redraw()});
+    $('#mfplus')&&($('#mfplus').onclick=()=>{games.push({r:'W',first:'me'});redraw()});$('#mfminus')&&($('#mfminus').onclick=()=>{games.pop();redraw()});
+    $('#mfno').onclick=()=>back();
+    $('#mfok').onclick=()=>{const k=keep();addManualMatch({...k,fmt,games});toast('Match aggiunto allo storico');back()}};
+  draw_()})}
 // Il Mazzo per Forge: file .dck da scaricare, o il testo da copiare.
 function forgeModal(){const cur=findSave(S.saveId);
   const name=cur?cur.name:(deckColors(S.pool,S.deck).join('')+' '+kitName(S.seed)).trim();const base=name.replace(/[\\/:*?"<>|]+/g,' ').trim()||'Mazzo';
@@ -1692,7 +1751,7 @@ function forgeModal(){const cur=findSave(S.saveId);
     $('#fgdl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain'}));
       a.download=base+'.dck';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
     $('#fgcp').onclick=()=>{const ta=m.querySelector('textarea');try{navigator.clipboard.writeText(t).then(()=>toast('Testo copiato'),()=>ta.select())}catch(e){ta.select()}}})}
-function showText(t){openModal('Lista del Mazzo',m=>{m.innerHTML=`<textarea readonly style="width:100%;min-height:300px;background:var(--felt2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px;font:12px var(--mono)">${esc(t)}</textarea>`;m.querySelector('textarea').select()})}
+function showText(t,title='Lista del Mazzo'){openModal(title,m=>{m.innerHTML=`<textarea readonly style="width:100%;min-height:300px;background:var(--felt2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px;font:12px var(--mono)">${esc(t)}</textarea>`;m.querySelector('textarea').select()})}
 
 /* 42-overlays.js */
 // La finestra si allarga (classe wide) quando ospita il costruttore del Mazzo.
@@ -1931,12 +1990,19 @@ function startGame(first,fmt){
   commit();
 }
 // Match finiti in questa sessione di gioco e, se il Mazzo è salvato, nel suo storico (±1 per annullare).
-function countMatch(res,sign){const s=mScore(res);if(!s.over)return;const t=G.tally,k=s.won?'w':s.drawn?'d':'l';t[k]=(t[k]||0)+sign;deckStat(S.saveId,s,sign)}
+// Chi ha iniziato ogni Partita del Match (issue #42): gs ha una voce per risultato, 'me' o 'opp'.
+const syncGs=m=>{const n=m.res.replace('C','').length;m.gs=(m.gs||[]).slice(0,n);while(m.gs.length<n)m.gs.push(G.first==='me'?'me':'opp')};
+function countMatch(res,sign){const s=mScore(res);if(!s.over)return;const t=G.tally,k=s.won?'w':s.drawn?'d':'l';t[k]=(t[k]||0)+sign;deckStat(S.saveId,s,sign);
+  // Lo storico: il Match finito entra, e l'annullamento lo toglie. Il Goldfish no, non ha un avversario.
+  if(G.mode==='solo')return;const m=G.match;
+  if(sign<0){if(m.hid)histDel(m.hid);m.hid=null;return}
+  syncGs(m);m.hid=histAdd({id:histId(),ts:Date.now(),mode:G.mode,opp:G.mode==='bot'?G.bot?.name||'Bot':OPP?.nm||'Avversario',fmt:fmtName(),deck:S.saveId||null,seed:S.seed,
+    games:[...res.replace('C','')].map((r,i)=>({r,first:m.gs[i]})),res:s.won?'W':s.drawn?'D':'L'})}
 // Fine della Partita: r = 'W' vinta, 'L' persa, 'D' pareggio.
 function recordResult(r){const m=G.match;if(mScore().over){toast('Il Match è già finito: inizia una nuova Partita per un nuovo Match');return}
-  m.res+=r;const s=mScore();countMatch(m.res,1);
+  m.res+=r;syncGs(m);const s=mScore();countMatch(m.res,1);
   log(G.me,`${{W:'Vince',L:'Perde',D:'Pareggia'}[r]} la Partita ${m.res.length}. Match ${scoreText()}${s.over?(s.won?': <b>Match vinto!</b>':': Match perso'):''}`);commit()}
-function undoResult(){const m=G.match;if(!m.res)return;countMatch(m.res,-1);m.res=m.res.slice(0,-1);G.gn=Math.min(G.gn,m.res.length+1);log(G.me,`Annulla l'ultimo risultato. Match ${scoreText()}`);commit()}
+function undoResult(){const m=G.match;if(!m.res)return;countMatch(m.res,-1);m.res=m.res.slice(0,-1);syncGs(m);G.gn=Math.min(G.gn,m.res.length+1);log(G.me,`Annulla l'ultimo risultato. Match ${scoreText()}`);commit()}
 // Chiudi il Match (issue #35): finisce con il punteggio che ha, per esempio a tempo scaduto. Si annulla come un risultato.
 function closeMatch(){const m=G.match;if(mScore().over)return;m.res+='C';const s=mScore();countMatch(m.res,1);
   log(G.me,`Chiude il Match: ${s.won?'vinto':s.drawn?'pareggiato':'perso'} ${scoreText()}`);commit()}
@@ -2380,7 +2446,7 @@ function roomChip(){const chip=$('#roomchip');if(!chip)return;
 let lastOppMs=null;
 function syncMatch(){if(!OPP||typeof OPP.ms!=='string'||!/^[WLD]{0,9}C?$/.test(OPP.ms)||OPP.ms===lastOppMs)return;lastOppMs=OPP.ms;
   const theirs=mirrorRes(OPP.ms),mine=G.match.res;
-  if(theirs.length>mine.length&&theirs.startsWith(mine)){const was=mScore().over;G.match.res=theirs;if(!was)countMatch(theirs,1);log(null,`${esc(OPP.nm||'L\'avversario')} ha registrato il risultato: Match ${scoreText()}`);commit()}}
+  if(theirs.length>mine.length&&theirs.startsWith(mine)){const was=mScore().over;G.match.res=theirs;syncGs(G.match);if(!was)countMatch(theirs,1);log(null,`${esc(OPP.nm||'L\'avversario')} ha registrato il risultato: Match ${scoreText()}`);commit()}}
 function renderTableIfOpen(){if(VIEW==='table')renderTable()}
 
 /* 80-table.js */
