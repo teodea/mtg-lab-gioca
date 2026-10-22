@@ -1700,7 +1700,7 @@ function renderDeck(){
   el.innerHTML=`<div class="dtool"><div><div class="eyebrow">Mazzo</div><div class="count ${st.total>=40?'ok':''}">${st.total}<small> / 40</small></div></div>
   <div class="stats"><span>Creature <b class="mono">${st.cre}</b></span><span>Altre magie <b class="mono">${st.cards.length-st.cre-st.cards.filter(x=>isLand(x.c)).length}</b></span><span>Terre <b class="mono">${st.lands}</b></span></div>
   <div class="curve" title="Curva di mana">${curve.map((n,i)=>`<div style="height:${n/cm*100}%"><span>${i===6?'6+':i}</span></div>`).join('')}</div>
-  <div class="row" style="margin-left:auto"><span class="savedas" title="Il Mazzo salvato da cui stai lavorando">${cur?`${esc(cur.name)}${deckDirty()?' · <b>modificato</b>':' · salvato'}`:'Non salvato'}</span><button class="btn" id="save">${cur?'Salva':'Salva…'}</button><button class="btn" id="saves">Mazzi salvati${SAVES.length?` (${SAVES.length})`:''}</button><button class="btn" id="auto">Auto-costruisci</button><button class="btn" id="lands">Suggerisci terre</button><button class="btn" id="copy">Copia lista (Arena)</button><button class="btn" id="forge">Esporta per Forge</button><button class="btn" id="clear" title="Rimette le carte del Mazzo nel Sideboard e azzera le terre base">Svuota</button><button class="btn pri" id="play">Gioca →</button></div>${gihSource()}</div>
+  <div class="row" style="margin-left:auto"><span class="savedas" title="Il Mazzo salvato da cui stai lavorando">${cur?`${esc(cur.name)}${deckDirty()?' · <b>modificato</b>':' · salvato'}`:'Non salvato'}</span><button class="btn" id="save">${cur?'Salva':'Salva…'}</button><button class="btn" id="saves">Mazzi salvati${SAVES.length?` (${SAVES.length})`:''}</button><button class="btn" id="auto">Auto-costruisci</button><button class="btn" id="lands">Suggerisci terre</button><button class="btn" id="copy">Copia lista (Arena)</button><button class="btn" id="phase" title="Gioca con le regole su phase-rs.dev, contro l’IA o con l’amico">Gioca su phase.rs</button><button class="btn" id="forge">Esporta per Forge</button><button class="btn" id="clear" title="Rimette le carte del Mazzo nel Sideboard e azzera le terre base">Svuota</button><button class="btn pri" id="play">Gioca →</button></div>${gihSource()}</div>
   <div class="dupbox row" id="dupbox" hidden></div>
   ${builderHTML(S.team?mateHead():'')}`;
   mountBuilder(el,renderDeck);paintDup();
@@ -1711,6 +1711,7 @@ function renderDeck(){
   $('#clear').onclick=()=>{S.deck=[];resetZone('deck');S.basics={W:0,U:0,B:0,R:0,G:0};saveS();renderDeck()};
   $('#copy').onclick=()=>{const t=deckText();const done=()=>toast('Lista copiata');try{navigator.clipboard.writeText(t).then(done,()=>showText(t))}catch(e){showText(t)}};
   $('#forge').onclick=forgeModal;
+  $('#phase').onclick=phaseModal;
   $('#play').onclick=()=>go('table');
   if(S.team)renderMate();
   publish();
@@ -1838,6 +1839,24 @@ function matchFormModal(back){let fmt='Bo3';const games=[{r:'W',first:'me'}];
     $('#mfno').onclick=()=>back();
     $('#mfok').onclick=()=>{const k=keep();addManualMatch({...k,fmt,games});toast('Match aggiunto allo storico');back()}};
   draw_()})}
+// Gioca su phase.rs (issue #50; #16 e la prova #49 in docs/research/phase-rs-dev.md): per giocare con le regole, contro l'IA o
+// con l'amico, si usa phase-rs.dev com'è. Il suo import legge la lista in formato Arena, non il .dck di Forge, e il Mazzo va
+// messo nel formato Limited. Il pulsante copia la lista, apre la pagina dei Mazzi di phase-rs.dev e spiega i passi.
+const PHASE_DECKS='https://phase-rs.dev/my-decks';
+function phaseModal(){const t=deckText();window.open(PHASE_DECKS,'_blank','noopener');
+  openModal('Gioca su phase.rs',m=>{
+    m.innerHTML=`<p style="margin-top:0" id="phst">Copio la lista del Mazzo e apro phase-rs.dev in una scheda nuova…</p>
+      <ol style="font-size:13.5px;padding-left:20px;margin:0 0 10px">
+        <li>Su phase-rs.dev, in <b>Decks</b>, premi <b>Import Deck</b>, incolla la lista e premi <b>Import</b>.</li>
+        <li>Apri il Mazzo importato e scegli il formato <b>Limited</b>: il deck builder parte da Standard, che vuole 60 carte.</li>
+        <li>Per l'IA: <b>Play vs AI</b>, formato Limited. Con l'amico: <b>Online</b> → <b>Host Game</b> in formato Limited, e gli dai il codice; lui importa il suo Mazzo allo stesso modo.</li></ol>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px">phase.rs è una alpha: le carte che non gestisce sono segnate nel suo deck builder. I Match giocati lì li aggiungi allo storico da «Mazzi salvati» → «Aggiungi un Match giocato altrove».</p>
+      <textarea readonly id="phlist" style="width:100%;min-height:180px;font:12px var(--mono)">${esc(t)}</textarea>
+      <div class="row mfoot"><button class="btn" id="phcopy">Copia di nuovo</button><a class="btn pri" href="${PHASE_DECKS}" target="_blank" rel="noopener">Apri phase-rs.dev</a></div>`;
+    // Senza appunti (permesso negato, pagina non sicura) la lista resta qui, selezionata, da copiare a mano.
+    const copy=()=>{const st=$('#phst'),ta=$('#phlist'),manual=()=>{st.textContent='Non riesco a copiare da solo: la lista è qui sotto, già selezionata. Copiala con Ctrl+C.';ta.focus();ta.select()};
+      try{navigator.clipboard.writeText(t).then(()=>{st.textContent='La lista del Mazzo è copiata e phase-rs.dev è aperto in una scheda nuova.'},manual)}catch(e){manual()}};
+    $('#phcopy').onclick=copy;copy()})}
 // Il Mazzo per Forge: file .dck da scaricare, o il testo da copiare.
 function forgeModal(){const cur=findSave(S.saveId);
   const name=cur?cur.name:(deckColors(S.pool,S.deck).join('')+' '+kitName(S.seed)).trim();const base=name.replace(/[\\/:*?"<>|]+/g,' ').trim()||'Mazzo';
