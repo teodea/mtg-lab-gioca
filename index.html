@@ -333,6 +333,7 @@ details>summary{cursor:pointer}
 .bc{position:absolute;width:var(--bw);cursor:grab;touch-action:none;transition:transform .15s}
 .bc.tapped{transform:rotate(90deg)}
 .bc.atk .face{box-shadow:0 0 0 2px var(--ember),0 0 14px rgba(240,168,96,.55)}
+.bc .ctltag{position:absolute;left:50%;top:-9px;transform:translateX(-50%);font:600 9px var(--mono);letter-spacing:.04em;padding:1px 5px;border-radius:99px;background:var(--prism);color:var(--prism-ink);white-space:nowrap;pointer-events:none;z-index:2}
 #arrows{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:60}
 #arrows line{stroke:var(--bad);stroke-width:4;stroke-linecap:round;opacity:.9;filter:drop-shadow(0 0 4px rgba(0,0,0,.6))}
 #arrows circle,#arrows marker path{fill:var(--bad)}
@@ -1884,6 +1885,8 @@ const ZN={hand:'in mano',gy:'nel cimitero',ex:'in esilio',libTop:'in cima al gri
 function autoPos(p,cid){const land=cid!=='x'&&isLand(cid);const W=myBfW()||900;const step=(cardW()+10)/W;
   const y=land?.8:.34;for(let row=0;row<3;row++){const yy=land?y-row*.12:y+row*.14;for(let x=step*.7;x<1-step/2;x+=step){if(!p.bf.some(o=>Math.abs(o.x-x)<step*.6&&Math.abs(o.y-yy)<.08))return{x,y:yy}}}return{x:.5,y}}
 function moveTo(p,u,zone,opt={}){
+  // Una carta controllata ma non posseduta, lasciando il campo, va nella zona del proprietario (issue #40).
+  if(zone!=='bf'){const c=p.bf.find(o=>o.u===u);if(c&&(c.gid||c.own)){returnControl(p,u,zone);return}}
   const r=take(p,u);if(!r)return;const o=r.o;const nm=r.from==='bf'&&o.fd?'una carta coperta':cname(o);
   if(isTok(o)&&zone!=='bf'){log(p,`<b>${esc(nm)}</b> (pedina) lascia il campo`);return}
   const base={u:o.u,c:o.c};if(o.v)base.v=o.v;if(o.tk)base.tk=1;if(o.c==='x'){base.tn=o.tn;base.pt=o.pt}
@@ -1948,6 +1951,44 @@ const undoMerge=on=>{UNDO.merge=!!on};
 function undo(){if(!undoCount())return null;const a=UNDO.stack.pop(),st=JSON.parse(a.st);G.me=st.me;G.bot=st.bot;
   log(G.me,'Annulla: '+esc(a.name));UNDO.last=undoSnap();UNDO.mark=G.log.at(-1);UNDO.merge=false;commit();return a.name}
 let saveT;function commit(){undoTrack();clearTimeout(saveT);saveT=setTimeout(()=>LS.set('mtg-lab:fra-game-v1',G),250);if(!drag)renderTable();publish()}
+
+/* 52-controllo.js */
+// Controllo delle carte (issue #40): «Dai il controllo» passa una mia carta sul campo all'avversario. Torna con «Restituisci»
+// (chi la controlla) o «Riprendi il controllo» (il proprietario), e se lascia il campo va nella zona del proprietario.
+// Contro il Bot le carte passano tra i due campi locali, con own: il lato del proprietario ('me' o 'bot'), solo finché la
+// controlla l'altro. Online ognuno scrive solo il proprio stato, come nell'ADR 0002:
+// - il proprietario tiene la carta nel suo campo con gv, l'id del passaggio, e la pubblica in gv invece che nel campo;
+// - chi la riceve ne crea una copia sua con gid = quell'id, e quando la ridà scrive in G.rt [gid, zona];
+// - syncControl riallinea i due stati a ogni presence dell'avversario. Ripeterla non cambia niente, anche dopo un Annulla.
+const ownerSide=p=>p===G.me?'me':'bot';
+function giveControl(p,u){const o=p.bf.find(o=>o.u===u);if(!o)return;
+  if(G.mode==='online'){o.gv=uid();o.atk=o.blk=false;log(p,`Dà il controllo di <b>${esc(cname(o))}</b> a ${esc(OPP?.nm||'l\'avversario')}`);return}
+  const to=p===G.me?G.bot:G.me;if(!to)return;p.bf.splice(p.bf.indexOf(o),1);
+  if(o.own===ownerSide(to))delete o.own;else o.own=o.own||ownerSide(p);
+  Object.assign(o,autoPos(to,o.c),{atk:false,blk:false});to.bf.push(o);log(p,`Dà il controllo di <b>${esc(cname(o))}</b> a ${esc(to.name)}`)}
+// Chi controlla una carta altrui la ridà: sul campo del proprietario (dest 'bf') o in un'altra sua zona.
+function returnControl(p,u,dest='bf'){const o=p.bf.find(o=>o.u===u);if(!o||!(o.gid||o.own))return;p.bf.splice(p.bf.indexOf(o),1);
+  if(o.gid){G.rt=(G.rt||[]).concat([[o.gid,dest]]);log(p,`<b>${esc(cname(o))}</b> torna a ${esc(OPP?.nm||'l\'avversario')}${dest==='bf'?'':' '+ZN[dest]}`);return}
+  const owner=o.own==='me'?G.me:G.bot;delete o.own;Object.assign(o,autoPos(owner,o.c),{atk:false,blk:false});owner.bf.push(o);
+  if(dest==='bf')log(p,`<b>${esc(cname(o))}</b> torna a ${esc(owner.name)}`);else moveTo(owner,o.u,dest)}
+// Il proprietario riprende online una carta data: gid è l'id del passaggio.
+function takeBack(gid){const o=G.me?.bf.find(o=>o.gv===gid);if(!o)return;delete o.gv;log(G.me,`Riprende il controllo di <b>${esc(cname(o))}</b>`)}
+// Riallinea il controllo con la presence dell'avversario (opp): le carte che mi ha dato, quelle che ha ripreso, le mie che ha
+// ridato. true se è cambiato qualcosa.
+function syncControl(opp){if(!G.me||G.mode!=='online'||!opp||opp.idle)return false;const me=G.me;let changed=false;
+  const gifts=(Array.isArray(opp.gv)?opp.gv:[]).filter(g=>Array.isArray(g)&&g.length>1),live=new Set(gifts.map(g=>String(g[0])));
+  const gone=new Set((G.rt||[]).map(r=>r[0]));
+  me.bf=me.bf.filter(o=>{if(!o.gid||live.has(o.gid))return true;changed=true;log(null,`${esc(opp.nm||'L\'avversario')} riprende il controllo di <b>${esc(cname(o))}</b>`);return false});
+  gifts.forEach(g=>{const id=String(g[0]);if(gone.has(id)||me.bf.some(o=>o.gid===id))return;
+    const r=unpackPerm(g.slice(1));if(r.c==='?')return;const o={...r,u:uid(),gid:id,...autoPos(me,r.c),atk:false,blk:false,sick:true,prep:false};delete o.bor;
+    me.bf.push(o);changed=true;log(null,`Ricevi il controllo di <b>${esc(cname(o))}</b>`)});
+  (Array.isArray(opp.rt)?opp.rt:[]).forEach(r=>{const o=Array.isArray(r)&&me.bf.find(o=>o.gv===String(r[0]));if(!o)return;
+    delete o.gv;changed=true;const dest=Object.hasOwn(ZN,r[1])&&r[1]!=='bf'?r[1]:'bf';
+    if(dest==='bf')log(null,`<b>${esc(cname(o))}</b> torna sotto il tuo controllo`);else moveTo(me,o.u,dest)});
+  return changed}
+// Chi possiede una carta controllata dall'altro, scritto sulla carta: null se la controlla il proprietario.
+// bor: una mia carta sul campo remoto dell'avversario.
+function ctlLabel(o){if(o.bor)return'tua';if(o.gid)return'di '+(OPP?.nm||'avversario');if(o.own)return o.own==='me'?'tua':'del '+(G.bot?.name||'Bot');return null}
 
 /* 60-bot.js */
 function landsOf(p){return p.bf.filter(o=>o.c!=='x'&&isLand(o.c)&&!o.tp)}
@@ -2036,21 +2077,27 @@ let ROOM=null,OPP=null,oppPeer=null,roomPeers=[];
 const vis=o=>o.v||o.c;
 const utf8len=s=>encodeURIComponent(s).replace(/%[0-9A-F]{2}/g,'x').length;
 const PRESENCE_MAX=3900; // byte dell'intera presence {g:...}; la Stanza rifiuta oltre 4096
-function packPerm(o){const a=[o.fd?'?':o.c==='x'?'x':vis(o),Math.round(o.x*1000),Math.round(o.y*1000),(o.tp?1:0)|(o.fd?2:0)|(o.prep?4:0)|(o.atk?8:0)|(o.blk?16:0),o.p1||0,o.n||0,o.c==='x'?((o.tn||'')+'|'+(o.pt||'')).slice(0,30):0];
+// Il mio campo come lo vede l'avversario: senza le carte che gli ho dato (gv, issue #40), che stanno sul suo.
+const shownBf=p=>p.bf.filter(o=>!o.gv);
+// Il bit 32 e gid (in fondo) dicono che la carta è dell'avversario e gli id del passaggio (issue #40).
+function packPerm(o){const a=[o.fd?'?':o.c==='x'?'x':vis(o),Math.round(o.x*1000),Math.round(o.y*1000),(o.tp?1:0)|(o.fd?2:0)|(o.prep?4:0)|(o.atk?8:0)|(o.blk?16:0)|(o.gid?32:0),o.p1||0,o.n||0,o.c==='x'?((o.tn||'')+'|'+(o.pt||'')).slice(0,30):0,o.gid||0];
   while(a.length>3&&!a[a.length-1])a.pop();return a}
+// Un permanente letto da un testo non fidato (presence dell'avversario). Id sconosciuti diventano '?', le varianti la carta base.
+function unpackPerm(a,i=0){const o={u:'r'+i,...(a[0]==='x'?{c:'x'}:fromVis(a[0])),x:num(a[1])/1000,y:num(a[2])/1000,tp:!!(a[3]&1),fd:!!(a[3]&2),prep:!!(a[3]&4),atk:!!(a[3]&8),blk:!!(a[3]&16),p1:num(a[4]),n:num(a[5])};
+  if(a[0]==='x'){const[t,pt]=String(a[6]||'').split('|');o.tn=t||'Pedina';o.pt=pt||'1/1'}if(a[3]&32){o.bor=true;if(a[7])o.gid=String(a[7]).slice(0,16)}return o}
 // Frecce di bersaglio (issue #39). Una freccia è {id, ts, from, to}: ogni estremo ha side 'me' o 'opp', e u (una carta) oppure
 // player. Le carte remote hanno u 'r' + indice nel campo. Nella presence viaggia come [id, da, i, verso, j], con indici del campo
 // perché gli uid sono di chi gioca: da 'b' (una mia carta sul campo) o 'h' (altrove, per esempio in mano: parte dal giocatore);
 // verso 'm' (una mia carta), 'o' (una sua), 'P' (me) o 'Q' (lui). Dura ARROW_MS, poi esce dalla presence.
 const ARROW_MS=6000;
 const arrowLive=(a,now=Date.now())=>!!a&&now-a.ts<ARROW_MS;
-function packArrow(a,me){const fi=a.from.side==='me'&&a.from.u?me.bf.findIndex(o=>o.u===a.from.u):-1,t=a.to;
-  const to=t.player?[t.side==='me'?'P':'Q',0]:t.side==='me'?['m',me.bf.findIndex(o=>o.u===t.u)]:['o',num(String(t.u).slice(1))];
+function packArrow(a,me){const bf=shownBf(me),fi=a.from.side==='me'&&a.from.u?bf.findIndex(o=>o.u===a.from.u):-1,t=a.to;
+  const to=t.player?[t.side==='me'?'P':'Q',0]:t.side==='me'?['m',bf.findIndex(o=>o.u===t.u)]:['o',num(String(t.u).slice(1))];
   return[a.id,fi<0?'h':'b',Math.max(0,fi),...to]}
 // La freccia dell'avversario dal punto di vista di chi la riceve (me: il suo giocatore); null se non c'è o non si può disegnare.
 function readArrow(ar,me){if(!Array.isArray(ar)||ar.length<5)return null;const [id,f,fi,t,ti]=ar,i=num(fi),j=num(ti);
   const from=f==='b'?{side:'opp',u:'r'+i}:{side:'opp',player:true};
-  const to=t==='m'?{side:'opp',u:'r'+j}:t==='P'?{side:'opp',player:true}:t==='Q'?{side:'me',player:true}:t==='o'&&me?.bf[j]?{side:'me',u:me.bf[j].u}:null;
+  const to=t==='m'?{side:'opp',u:'r'+j}:t==='P'?{side:'opp',player:true}:t==='Q'?{side:'me',player:true}:t==='o'&&me&&shownBf(me)[j]?{side:'me',u:shownBf(me)[j].u}:null;
   return to?{id,from,to}:null}
 // hid: la scheda è nascosta. Chi resta nascosto a lungo non conta tra i presenti (vedi awake).
 let tabHidden=false;
@@ -2091,7 +2138,9 @@ function compactMe(){const p=G.me;const base={v:2,nm:(S.nick||'Giocatore').slice
   if(!p||G.mode!=='online')return{...base,idle:1};
   // fw: larghezza del mio campo e delle mie carte in px, per capire da remoto quali carte si toccavano.
   const o={...base,fw:[Math.round(myBfW()),Math.round(cardW())],lf:p.life,ps:p.psn||0,ct:p.ct||0,lb:p.lib.length,hd:p.hand.length,tn:p.turn,rv:p.rv?p.hand.slice(0,12).map(vis):0,
-    bf:p.bf.map(packPerm),gc:p.gy.length,ec:p.ex.length,...(arrowLive(G.arrow)?{ar:packArrow(G.arrow,p)}:{})};
+    bf:shownBf(p).map(packPerm),gc:p.gy.length,ec:p.ex.length,
+    // Carte date all'avversario e carte sue ridate (issue #40).
+    ...(p.bf.some(o=>o.gv)?{gv:p.bf.filter(o=>o.gv).map(o=>[o.gv,...packPerm(o)])}:{}),...(G.rt?.length?{rt:G.rt.slice(-40)}:{}),...(arrowLive(G.arrow)?{ar:packArrow(G.arrow,p)}:{})};
   // Se non ci sta: prima si accorcia il log, poi si lasciano fuori le carte più vecchie di cimitero ed esilio (i conteggi restano veri).
   let gy=p.gy.map(vis),ex=p.ex.map(vis);const t=teamPub();const fits=()=>{o.gy=gy.join(' ');o.ex=ex.join(' ');return utf8len(JSON.stringify({g:o,t}))<=PRESENCE_MAX};
   while(!fits()){if(o.lg.length>2)o.lg=o.lg.slice(1);else if(gy.length>8||ex.length>4){gy=gy.slice(-Math.max(8,gy.length-10));ex=ex.slice(-Math.max(4,ex.length-5))}else if(o.lg.length)o.lg=o.lg.slice(1);else if(o.bf.length)o.bf.pop();else break}
@@ -2130,6 +2179,7 @@ function peersChanged(timer){const before=peerIds();
   const playing=roomPeers.filter(p=>!p.presence.g.idle),others=playing.filter(p=>!p.isMe),mine=roomPeers.find(p=>p.peer===oppPeer)?.isMe;
   if(!oppPicked&&others.length===1&&(!oppPeer||mine))oppPeer=others[0].peer;else if(!oppPeer&&playing.length===1)oppPeer=playing[0].peer;
   const cur=roomPeers.find(p=>p.peer===oppPeer);OPP=cur?cur.presence.g:null;
+  if(syncControl(OPP)&&!drag)commit();
   syncMatch();roomChip();
   // La barra della modalità si ridisegna solo se cambia ciò che mostra (avversari, risultati), per non rubare i clic.
   const mbKey=JSON.stringify([oppPeer,OPP?.ms,OPP?.bo,OPP?.hg,roomPeers.map(p=>p.presence.g.nm)]);
@@ -2245,7 +2295,7 @@ function remotePile(s,total,pre){const ids=typeof s==='string'&&s?s.split(' ').s
   return Array.from({length:n},(_,i)=>{const id=ids[i-(n-ids.length)];return{u:pre+i,...(id?fromVis(id):{c:'?'})}})}
 function remoteToPlayer(g){const rv=Array.isArray(g.rv)?g.rv.map(fromVis):null;const hd=cnt(g.hd,99);
   return{name:String(g.nm||'Avversario'),fw:Array.isArray(g.fw)?{W:cnt(g.fw[0],9999),bw:cnt(g.fw[1],400)}:null,life:num(g.lf),psn:cnt(g.ps),ct:cnt(g.ct),lib:Array(cnt(g.lb,300)).fill({c:'?'}),hand:rv&&rv.length===hd?rv:Array(hd).fill({c:'?'}),rv:!!rv,turn:num(g.tn),
-  bf:(Array.isArray(g.bf)?g.bf:[]).filter(Array.isArray).map((a,i)=>{const o={u:'r'+i,...(a[0]==='x'?{c:'x'}:fromVis(a[0])),x:num(a[1])/1000,y:num(a[2])/1000,tp:!!(a[3]&1),fd:!!(a[3]&2),prep:!!(a[3]&4),atk:!!(a[3]&8),blk:!!(a[3]&16),p1:num(a[4]),n:num(a[5])};if(a[0]==='x'){const[t,pt]=String(a[6]||'').split('|');o.tn=t||'Pedina';o.pt=pt||'1/1'}return o}),
+  bf:(Array.isArray(g.bf)?g.bf:[]).filter(Array.isArray).map(unpackPerm),
   gy:remotePile(g.gy,g.gc,'g'),ex:remotePile(g.ex,g.ec,'e')}}
 // Campo remoto: le coordinate sono in proporzione al campo di chi gioca, che può essere più largo del mio.
 // Due carte che da me si toccano in verticale e che da lui non si toccavano in orizzontale (sender = {W,bw} del suo
@@ -2303,9 +2353,11 @@ function zoneEl(p,{owner,live,mirror}){const on=activeSide()===(owner==='me'?'me
     if(!hidden){setPreviewAttrs(w,o);if(live){w.dataset.u=o.u;w.dataset.z='hand'}}hand.appendChild(w)});
   const body=document.createElement('div');body.className='zbody';
   const bf=document.createElement('div');bf.className='bf';bf.dataset.drop='bf';if(mirror)bf.dataset.mirror='1';
-  if(!p.bf.length)bf.innerHTML=`<div class="hint">${owner==='me'?'Trascina qui le carte dalla mano, oppure cliccale. Clic su una carta sul campo = tappa. Tasto destro = ingrandisci e altre azioni.':''}</div>`;
+  // Le carte che ho dato all'avversario (issue #40) stanno sul suo campo.
+  const cards=shownBf(p);
+  if(!cards.length)bf.innerHTML=`<div class="hint">${owner==='me'?'Trascina qui le carte dalla mano, oppure cliccale. Clic su una carta sul campo = tappa. Tasto destro = ingrandisci e altre azioni.':''}</div>`;
   requestAnimationFrame(()=>{if(bf.clientWidth)lastBfW=bf.clientWidth});
-  p.bf.forEach(o=>bf.appendChild(bfCard(o,{mirror,mine:owner!=='opp',live})));
+  cards.forEach(o=>bf.appendChild(bfCard(o,{mirror,mine:owner!=='opp',live})));
   const piles=document.createElement('div');piles.className='piles';
   piles.appendChild(pileEl('lib','Grimorio',p.lib,true,live));piles.appendChild(pileEl('gy','Cimitero',p.gy,false,live));piles.appendChild(pileEl('ex','Esilio',p.ex,false,live));
   body.append(bf,piles);
@@ -2319,7 +2371,7 @@ function bfCard(o,{mirror,mine,live}){
   const el=document.createElement('div');el.className='bc'+(o.tp?' tapped':'')+(o.atk?' atk':'')+(o.blk?' blk':'')+(o.sick&&isCreature(o)&&mine?' sick':'');
   const showFace=!o.fd||(mine&&live);el.appendChild(faceEl(o,{back:o.fd&&!(mine&&live)}));
   if(showFace&&o.c!=='?')setPreviewAttrs(el,o);if(o.fd&&mine&&live)el.firstChild.style.opacity='.55';
-  if(live){el.dataset.u=o.u;el.dataset.z='bf'}else el.dataset.ru=o.u
+  if(live){el.dataset.u=o.u;el.dataset.z='bf'}else{el.dataset.ru=o.u;if(o.gid)el.dataset.gid=o.gid}
   const bw=cardW(),bh=bw*CARD_H;
   el.style.left=`calc(${(o.x*100).toFixed(2)}% - ${bw/2}px)`;el.style.top=`calc(${((mirror?1-o.y:o.y)*100).toFixed(2)}% - ${bh/2}px)`;
   const bd=document.createElement('div');bd.className='badges';let h='';
@@ -2327,6 +2379,7 @@ function bfCard(o,{mirror,mine,live}){
   if(o.c!=='?'&&!o.fd&&isCreature(o))h+=`<span class="bdg pt ${o.p1>0?'up':o.p1<0?'dn':''}">${pow(o)}/${tou(o)}</span>`;
   bd.innerHTML=h;el.appendChild(bd);
   if(o.prep)el.insertAdjacentHTML('beforeend','<span class="tag">PREPARATA</span>');
+  const ctl=ctlLabel(o);if(ctl)el.insertAdjacentHTML('beforeend',`<span class="ctltag" title="Il proprietario della carta: la controlla l'altro giocatore">${esc(ctl)}</span>`);
   return el;
 }
 // Two-Headed Giant: il primo mulligan è gratis (CR 103.5c), quindi si mettono in fondo una carta in meno.
@@ -2425,14 +2478,18 @@ function clickCard(p,u,from){const f=find(p,u);if(!f)return;
 document.addEventListener('click',e=>{if(VIEW!=='table')return;const pl=e.target.closest('[data-pile]');if(!pl)return;const z=pl.closest('.zone');const live=z.dataset.live==='1';
   const p=live?ownerP(z):remoteToPlayer(OPP||{});const k=pl.dataset.pile;
   if(k==='lib'){if(live){draw(p);commit()}}else zoneModal(p,k,live)});
-document.addEventListener('contextmenu',e=>{if(VIEW!=='table')return;const z=e.target.closest('.zone');if(!z||z.dataset.live!=='1')return;
+document.addEventListener('contextmenu',e=>{if(VIEW!=='table')return;const z=e.target.closest('.zone');if(!z)return;
+  // Una mia carta sul campo dell'avversario (issue #40): il proprietario la può riprendere.
+  if(z.dataset.live!=='1'){const g=e.target.closest('[data-gid]');if(g){e.preventDefault();openMenu(e.clientX,e.clientY,[['Riprendi il controllo',()=>{takeBack(g.dataset.gid);commit()}]])}return}
   const el=e.target.closest('[data-u]');const pl=e.target.closest('[data-pile="lib"]');if(!el&&!pl)return;e.preventDefault();const p=ownerP(z);
   if(zoomedOn(el)){closeZoom();return}
   if(el)cardMenu(p,el.dataset.u,e.clientX,e.clientY);else libMenu(p,e.clientX,e.clientY)});
 function cardMenu(p,u,x,y){const f=find(p,u);if(!f)return;const o=f.o;const done=fn=>()=>{fn();commit()};const zoom=['Ingrandisci',()=>showZoom(o,document.querySelector(`.zone[data-live="1"] [data-u="${CSS.escape(u)}"]`),{text:true})];
   const mv=[['In mano',done(()=>moveTo(p,u,'hand'))],['Nel cimitero',done(()=>moveTo(p,u,'gy'))],['In esilio',done(()=>moveTo(p,u,'ex'))],['In cima al grimorio',done(()=>moveTo(p,u,'libTop'))],['In fondo al grimorio',done(()=>moveTo(p,u,'libBot'))]];
   const aim=['Bersaglio…',()=>startTarget(p,u)];
-  if(f.z==='bf'){openMenu(x,y,[zoom,aim,'-',[o.tp?'Stappa':'Tappa',done(()=>{o.tp=!o.tp}),'T'],[o.atk?'Togli da attacco':'Segna in attacco',done(()=>{o.atk=!o.atk;if(o.atk){o.blk=false;if(!kw(o,'Vigilance'))o.tp=true}})],
+  // Controllo (issue #40): una carta altrui si ridà; una propria si dà all'avversario, se c'è.
+  const ctl=o.gid||o.own?['Restituisci',done(()=>returnControl(p,u))]:G.mode==='bot'||G.mode==='online'&&OPP&&!OPP.idle?['Dai il controllo',done(()=>giveControl(p,u))]:null;
+  if(f.z==='bf'){openMenu(x,y,[zoom,aim,...(ctl?[ctl]:[]),'-',[o.tp?'Stappa':'Tappa',done(()=>{o.tp=!o.tp}),'T'],[o.atk?'Togli da attacco':'Segna in attacco',done(()=>{o.atk=!o.atk;if(o.atk){o.blk=false;if(!kw(o,'Vigilance'))o.tp=true}})],
     // Chi blocca chi si mostra trascinando il bloccante davanti all'attaccante (issue #38).
     [o.blk?'Togli dal blocco':'Segna in blocco',done(()=>{o.blk=!o.blk;if(o.blk){o.atk=false;log(p,`Blocca con <b>${esc(cname(o))}</b>`)}})],'-',
     ['Segnalino +1/+1',done(()=>o.p1=(o.p1||0)+1)],['Segnalino −1/−1',done(()=>o.p1=(o.p1||0)-1)],['Segnalino / fedeltà +1',done(()=>o.n=(o.n||0)+1)],['Segnalino / fedeltà −1',done(()=>o.n=(o.n||0)-1)],
