@@ -269,6 +269,11 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .mscore{font:600 12.5px var(--mono);letter-spacing:.02em;padding:4px 9px;border-radius:6px;background:var(--surface2);border:1px solid var(--line)}
 .mscore.won{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 .mscore.lost{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.dupbox{gap:10px;padding:8px 12px;margin:0 0 10px;border:1px solid color-mix(in srgb,var(--prism) 40%,var(--line));border-radius:8px;background:var(--felt2);font-size:13px}
+.dupbox[hidden]{display:none}
+.cmpcols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+@media (max-width:760px){.cmpcols{grid-template-columns:1fr}}
+.cmptab{border-collapse:collapse;font-size:13px}.cmptab th,.cmptab td{padding:4px 12px;border-bottom:1px solid var(--line);text-align:left}.cmptab th{font-weight:600;color:var(--muted)}
 #oppz .sbnote{display:block;width:max-content;margin:0 0 6px}
 .mscore.drawn{color:var(--ember);border-color:color-mix(in srgb,var(--ember) 45%,transparent)}
 .mgrid>.nog,.mgrid>.muted{grid-column:1/-1}
@@ -1575,8 +1580,9 @@ function renderDeck(){
   <div class="stats"><span>Creature <b class="mono">${st.cre}</b></span><span>Altre magie <b class="mono">${st.cards.length-st.cre-st.cards.filter(x=>isLand(x.c)).length}</b></span><span>Terre <b class="mono">${st.lands}</b></span></div>
   <div class="curve" title="Curva di mana">${curve.map((n,i)=>`<div style="height:${n/cm*100}%"><span>${i===6?'6+':i}</span></div>`).join('')}</div>
   <div class="row" style="margin-left:auto"><span class="savedas" title="Il Mazzo salvato da cui stai lavorando">${cur?`${esc(cur.name)}${deckDirty()?' · <b>modificato</b>':' · salvato'}`:'Non salvato'}</span><button class="btn" id="save">${cur?'Salva':'Salva…'}</button><button class="btn" id="saves">Mazzi salvati${SAVES.length?` (${SAVES.length})`:''}</button><button class="btn" id="auto">Auto-costruisci</button><button class="btn" id="lands">Suggerisci terre</button><button class="btn" id="copy">Copia lista (Arena)</button><button class="btn" id="forge">Esporta per Forge</button><button class="btn" id="clear" title="Rimette le carte del Mazzo nel Sideboard e azzera le terre base">Svuota</button><button class="btn pri" id="play">Gioca →</button></div>${gihSource()}</div>
+  <div class="dupbox row" id="dupbox" hidden></div>
   ${builderHTML(S.team?mateHead():'')}`;
-  mountBuilder(el,renderDeck);
+  mountBuilder(el,renderDeck);paintDup();
   $('#save').onclick=()=>{if(!cur){savesModal();return}saveDeck();renderDeck();toast('Salvato: '+cur.name)};
   $('#saves').onclick=savesModal;
   $('#auto').onclick=()=>{const r=autoBuild(myPool(),GIH_?.w);S.deck=r.uids;resetZone('deck');S.basics=r.basics;saveS();renderDeck();toast('Mazzo '+r.pair+' costruito: rivedilo tu!')};
@@ -2083,6 +2089,77 @@ function sbStatus(){if(G.mode!=='online'||!OPP||OPP.idle&&!OPP.sb)return'';
   if(Array.isArray(OPP.sb))return `${oppName()} sta facendo Sideboard · Mazzo ${Math.max(0,num(OPP.sb[0]))}, Sideboard ${Math.max(0,num(OPP.sb[1]))}`;
   return num(OPP.gn)===nextGn()&&!gameOpen()?`${oppName()} è pronto: ha iniziato la Partita ${nextGn()}`:''}
 
+/* 55-duplicate.js */
+// Duplicate Sealed con l'amico (issue #41): stesso codice (Kit individuale o Pool da lista), due costruzioni separate, poi il
+// confronto dei due Mazzi. Lo facevano i giocatori forti ai Grand Prix (Nate Price, 2012; «Theros Sealed Seven Ways», SCG 2013).
+// Lo stato sta nella Sessione, S.dup = {id, seed, phase: 'run' | 'done', snap, opp}: snap è il Mazzo fissato con «Ho finito»,
+// opp quello che si sa dell'altro ({done, deck}). Un Kit nuovo apre una Sessione nuova e lo azzera.
+// Nella presence (dp) viaggiano [codice, id, ho finito] e, solo quando ho finito io e so che ha finito anche l'altro, il mio
+// Mazzo: così nessuno lo può vedere prima. Se avviano tutti e due, vale l'id minore, uguale sulle due pagine.
+
+// Il confronto tra due Mazzi dello stesso Pool, a e b = {deck: uid, basics}. Serve anche alle versioni salvate (issue #43).
+// both, onlyA, onlyB: uid; per ognuno n (con le terre base), creature, altre magie, terre non base, terre base, curva (1…6+,
+// il costo 0 con l'1 come nelle Pile) e colori delle carte non terra.
+function compareDecks(pool,a,b){const byU=byUid(pool),ok=d=>[...new Set(d.deck)].filter(u=>byU[u]),A=ok(a),B=ok(b),inA=new Set(A),inB=new Set(B);
+  const stats=(us,basics)=>{const r={cre:0,non:0,lands:0,curve:[0,0,0,0,0,0],colors:[],basics:{W:0,U:0,B:0,R:0,G:0}};const col=new Set();
+    us.forEach(u=>{const c=byU[u].c;if(isLand(c)){r.lands++;return}isCreatureCid(c)?r.cre++:r.non++;r.curve[Math.min(5,Math.max(0,Math.floor(cmc(c))-1))]++;[...BY[c].c].forEach(k=>col.add(k))});
+    COLORS.forEach(k=>r.basics[k]=Math.max(0,Math.floor(+basics?.[k]||0)));r.colors=COLORS.filter(k=>col.has(k));
+    r.n=us.length+COLORS.reduce((s,k)=>s+r.basics[k],0);return r};
+  return{both:A.filter(u=>inB.has(u)),onlyA:A.filter(u=>!inB.has(u)),onlyB:B.filter(u=>!inA.has(u)),a:stats(A,a.basics),b:stats(B,b.basics)}}
+
+function dupStart(){if(S.team||S.dup)return false;S.dup={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),seed:S.seed,phase:'run',snap:null,opp:{done:false,deck:null}};saveS();return true}
+function dupFinish(){const d=S.dup;if(!d||d.phase==='done')return;d.phase='done';d.snap={deck:[...S.deck],basics:{...S.basics}};saveS()}
+// Si torna a costruire solo finché l'altro non ha finito: dopo, il confronto è già suo.
+function dupResume(){const d=S.dup;if(!d||d.phase!=='done'||d.opp.done)return false;d.phase='run';d.snap=null;saveS();return true}
+const dupBoth=(d=S.dup)=>!!d&&d.phase==='done'&&d.opp.done;
+function dupPack(){const d=S.dup;if(!d)return null;const out=[d.seed,d.id,d.phase==='done'?1:0];
+  if(dupBoth(d)){const at=Object.fromEntries(S.pool.map((x,i)=>[x.u,i]));out.push(d.snap.deck.filter(u=>u in at).map(u=>b36(at[u])).join(' '),COLORS.map(k=>d.snap.basics[k]||0).join('.'))}
+  return out}
+// Il Duplicate dell'avversario (opp: la sua presence). 'started' se è appena partito anche qui (va avviato il timer),
+// 'changed' se è cambiato qualcosa, null se non c'entra.
+function dupSync(opp,now=Date.now()){const a=opp&&Array.isArray(opp.dp)?opp.dp:null;if(!a||S.team||a[0]!==S.seed||typeof a[1]!=='string')return null;
+  const id=a[1].slice(0,20);let r=null;
+  if(!S.dup||id<S.dup.id&&S.dup.id!==id){S.dup={id,seed:S.seed,phase:'run',snap:null,opp:{done:false,deck:null}};r='started'}
+  if(S.dup.id!==id){if(r)saveS();return r}
+  const n=S.pool.length,done=a[2]===1;let deck=null;
+  if(done&&typeof a[3]==='string'){const us=String(a[3]).split(' ').filter(w=>/^[0-9a-z]{1,2}$/.test(w)).map(w=>parseInt(w,36)).filter(i=>i<n).map(i=>S.pool[i].u);
+    const bs=String(a[4]||'').split('.'),basics={};COLORS.forEach((k,i)=>basics[k]=Math.max(0,Math.min(60,Math.floor(+bs[i]||0))));deck={deck:us,basics}}
+  const was=JSON.stringify(S.dup.opp);S.dup.opp={done,deck};if(JSON.stringify(S.dup.opp)!==was){r=r||'changed';saveS()}
+  return r}
+// Il confronto, dal mio punto di vista (a: il mio Mazzo, b: il suo); null finché non c'è il suo Mazzo.
+const dupResult=()=>dupBoth()&&S.dup.opp.deck?compareDecks(S.pool,S.dup.snap,S.dup.opp.deck):null;
+
+/* interfaccia: il riquadro sotto la testata del Mazzo e la finestra del confronto */
+// Il riquadro c'è quando un avversario nella Stanza ha lo stesso codice, o quando un Duplicate è in corso.
+function dupBoxHTML(){if(S.team||!(S.dup||OPP&&OPP.sd===S.seed))return'';const nm=esc(oppName()),d=S.dup;
+  const B=(id,l,cls='')=>`<button class="btn sm ${cls}" id="${id}">${l}</button>`;
+  if(!d)return `<span><b>Duplicate Sealed</b> · ${nm} ha il tuo stesso Pool: costruite ognuno il suo Mazzo, poi li confrontate.</span>${B('dupgo','Duplicate Sealed con '+nm,'pri')}`;
+  if(d.phase==='run')return `<span><b>Duplicate Sealed con ${nm}</b> · ${d.opp.done?`${nm} ha finito`:`${nm} sta costruendo`}. Il suo Mazzo lo vedi quando avete finito tutti e due.</span>${B('dupdone','Ho finito','pri')}`;
+  if(!d.opp.done)return `<span><b>Duplicate Sealed</b> · Hai finito: aspetti ${nm}.</span>${B('dupres','Riprendi a costruire')}`;
+  if(!d.opp.deck)return `<span><b>Duplicate Sealed</b> · Avete finito tutti e due: arriva il Mazzo di ${nm}…</span>`;
+  return `<span><b>Duplicate Sealed</b> · Avete finito tutti e due.</span>${B('dupcmp','Confronta i Mazzi','pri')}${B('dupplay','Gioca contro '+nm)}`}
+// Si riscrive solo se cambia, per non togliere un pulsante da sotto il mouse.
+function paintDup(){const b=$('#dupbox');if(!b)return;const h=dupBoxHTML();b.hidden=!h;if(b.dataset.html===h)return;b.innerHTML=h;b.dataset.html=h;
+  const on=(id,f)=>{const e=$('#'+id);if(e)e.onclick=f};
+  on('dupgo',()=>{if(!dupStart())return;dupTimer();publish();paintDup();toast(`Duplicate Sealed avviato: il timer di costruzione parte anche per ${oppName()}`)});
+  on('dupdone',()=>{dupFinish();publish();paintDup()});
+  on('dupres',()=>{dupResume();publish();paintDup()});
+  on('dupcmp',()=>compareModal(dupResult(),'Tu',oppName()));
+  on('dupplay',()=>{G.mode='online';commit();go('table');if(!gameOpen())nextGameModal()})}
+// I due timer di costruzione partono insieme, da 45 minuti.
+const dupTimer=()=>{const now=Date.now();setTimer(timerStart(timerReset(timerSetDur(TIMER,45,now)),now))};
+function dupReact(r){if(!r)return;if(r==='started'){dupTimer();toast(`${oppName()} ha avviato un Duplicate Sealed: il timer di costruzione parte`)}publish();paintDup()}
+// Il confronto di due Mazzi (r: compareDecks), na e nb i loro nomi.
+function compareModal(r,na,nb){if(!r)return;openModal(`Confronto dei Mazzi: ${na} e ${nb}`,m=>{m.parentElement.classList.add('wide');const byU=byUid(S.pool);
+  const list=us=>us.map(u=>byU[u]).sort(byCost).map(x=>`<div class="hit" data-cid="${x.c}"${x.v?` data-v="${x.v}"`:''}><i class="rar ${BY[x.c].r}"></i><span class="n">${esc(BY[x.c].n)}</span><span>${mana(BY[x.c].f[0].m||'')}</span></div>`).join('')||'<span class="muted">Nessuna</span>';
+  const col=(t,us)=>`<div class="sumbox"><h3>${esc(t)} (${us.length})</h3><div class="hits">${list(us)}</div></div>`;
+  const row=(l,f)=>`<tr><th>${l}</th><td>${f(r.a)}</td><td>${f(r.b)}</td></tr>`;
+  const basics=s=>COLORS.filter(k=>s.basics[k]).map(k=>`<span class="ms ${k}"></span>${s.basics[k]}`).join(' ')||'–';
+  m.innerHTML=`<div class="cmpcols">${col('Solo '+na,r.onlyA)}${col('In comune',r.both)}${col('Solo '+nb,r.onlyB)}</div>
+    <table class="cmptab"><tr><th></th><th>${esc(na)}</th><th>${esc(nb)}</th></tr>
+    ${row('Carte',s=>s.n)}${row('Creature',s=>s.cre)}${row('Altre magie',s=>s.non)}${row('Terre non base',s=>s.lands)}${row('Terre base',basics)}
+    ${row('Colori',s=>s.colors.map(k=>`<span class="ms ${k}"></span>`).join('')||'–')}${row('Curva 1-2-3-4-5-6+',s=>`<span class="mono">${s.curve.join(' · ')}</span>`)}</table>`})}
+
 /* 60-bot.js */
 function landsOf(p){return p.bf.filter(o=>o.c!=='x'&&isLand(o.c)&&!o.tp)}
 function canPay(p,cid){
@@ -2229,7 +2306,9 @@ function syncMate(){const nk=!gameOpen()&&mateMoved(allPeers);
   return JSON.stringify([MATE,S.tc])!==was}
 function compactMe(){const p=G.me;const base={v:2,nm:(S.nick||'Giocatore').slice(0,24),lg:G.log.filter(l=>l.w==='me').slice(-6).map(l=>[l.ts,l.tx.slice(0,110),l.k||0]),ms:G.match?.res||'',bo:G.match?.bo||3,...(G.match?.hg?{hg:1}:{}),...(tabHidden?{hid:1}:{}),
     // Tra le Partite (issue #34 e #36): moneta e scelta di chi inizia, conteggi del Sideboard mentre lo si cambia.
-    ...(pickPack()?{pk:pickPack()}:{}),...(sbPack()?{sb:sbPack()}:{})};
+    ...(pickPack()?{pk:pickPack()}:{}),...(sbPack()?{sb:sbPack()}:{}),
+    // Il codice del Kit, per proporre un Duplicate Sealed a chi ha lo stesso, e il Duplicate in corso (issue #41).
+    ...(!S.team?{sd:S.seed}:{}),...(dupPack()?{dp:dupPack()}:{})};
   if(!p||G.mode!=='online')return{...base,idle:1};
   // fw: larghezza del mio campo e delle mie carte in px, per capire da remoto quali carte si toccavano.
   const o={...base,gn:G.gn,fw:[Math.round(myBfW()),Math.round(cardW())],lf:p.life,ps:p.psn||0,ct:p.ct||0,lb:p.lib.length,hd:p.hand.length,tn:p.turn,rv:p.rv?p.hand.slice(0,12).map(vis):0,
@@ -2282,6 +2361,7 @@ function peersChanged(timer){const before=peerIds();
   else if(!oppPeer&&roomPeers.length===1)oppPeer=roomPeers[0].peer;
   const cur=roomPeers.find(p=>p.peer===oppPeer);OPP=cur?cur.presence.g:null;
   const ctl=syncControl(OPP),tm=roundSync(OPP),pk=pickSync(OPP);if((ctl||tm||pk)&&!drag)commit();nextGameModal.paint?.();
+  dupReact(dupSync(OPP));if(VIEW==='deck')paintDup();
   syncMatch();roomChip();
   // La barra della modalità si ridisegna solo se cambia ciò che mostra (avversari, risultati), per non rubare i clic.
   const mbKey=JSON.stringify([oppPeer,OPP?.ms,OPP?.bo,OPP?.hg,roomPeers.map(p=>p.presence.g.nm)]);
