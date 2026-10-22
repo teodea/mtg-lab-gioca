@@ -333,6 +333,11 @@ details>summary{cursor:pointer}
 .bc{position:absolute;width:var(--bw);cursor:grab;touch-action:none;transition:transform .15s}
 .bc.tapped{transform:rotate(90deg)}
 .bc.atk .face{box-shadow:0 0 0 2px var(--ember),0 0 14px rgba(240,168,96,.55)}
+#arrows{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:60}
+#arrows line{stroke:var(--bad);stroke-width:4;stroke-linecap:round;opacity:.9;filter:drop-shadow(0 0 4px rgba(0,0,0,.6))}
+#arrows circle,#arrows marker path{fill:var(--bad)}
+body.targeting .zone .bf .bc,body.targeting .zone .zbar{cursor:crosshair}
+body.targeting .zone .bf .bc:hover .face{outline:3px solid var(--bad);outline-offset:1px}
 .bc.blk .face{box-shadow:0 0 0 2px var(--prism),0 0 14px color-mix(in srgb,var(--prism) 55%,transparent)}
 .bc.sick .face{filter:saturate(.75) brightness(.9)}
 .bc.drag-src{opacity:.25}
@@ -2033,6 +2038,20 @@ const utf8len=s=>encodeURIComponent(s).replace(/%[0-9A-F]{2}/g,'x').length;
 const PRESENCE_MAX=3900; // byte dell'intera presence {g:...}; la Stanza rifiuta oltre 4096
 function packPerm(o){const a=[o.fd?'?':o.c==='x'?'x':vis(o),Math.round(o.x*1000),Math.round(o.y*1000),(o.tp?1:0)|(o.fd?2:0)|(o.prep?4:0)|(o.atk?8:0)|(o.blk?16:0),o.p1||0,o.n||0,o.c==='x'?((o.tn||'')+'|'+(o.pt||'')).slice(0,30):0];
   while(a.length>3&&!a[a.length-1])a.pop();return a}
+// Frecce di bersaglio (issue #39). Una freccia è {id, ts, from, to}: ogni estremo ha side 'me' o 'opp', e u (una carta) oppure
+// player. Le carte remote hanno u 'r' + indice nel campo. Nella presence viaggia come [id, da, i, verso, j], con indici del campo
+// perché gli uid sono di chi gioca: da 'b' (una mia carta sul campo) o 'h' (altrove, per esempio in mano: parte dal giocatore);
+// verso 'm' (una mia carta), 'o' (una sua), 'P' (me) o 'Q' (lui). Dura ARROW_MS, poi esce dalla presence.
+const ARROW_MS=6000;
+const arrowLive=(a,now=Date.now())=>!!a&&now-a.ts<ARROW_MS;
+function packArrow(a,me){const fi=a.from.side==='me'&&a.from.u?me.bf.findIndex(o=>o.u===a.from.u):-1,t=a.to;
+  const to=t.player?[t.side==='me'?'P':'Q',0]:t.side==='me'?['m',me.bf.findIndex(o=>o.u===t.u)]:['o',num(String(t.u).slice(1))];
+  return[a.id,fi<0?'h':'b',Math.max(0,fi),...to]}
+// La freccia dell'avversario dal punto di vista di chi la riceve (me: il suo giocatore); null se non c'è o non si può disegnare.
+function readArrow(ar,me){if(!Array.isArray(ar)||ar.length<5)return null;const [id,f,fi,t,ti]=ar,i=num(fi),j=num(ti);
+  const from=f==='b'?{side:'opp',u:'r'+i}:{side:'opp',player:true};
+  const to=t==='m'?{side:'opp',u:'r'+j}:t==='P'?{side:'opp',player:true}:t==='Q'?{side:'me',player:true}:t==='o'&&me?.bf[j]?{side:'me',u:me.bf[j].u}:null;
+  return to?{id,from,to}:null}
 // hid: la scheda è nascosta. Chi resta nascosto a lungo non conta tra i presenti (vedi awake).
 let tabHidden=false;
 // Larghezza del mio campo misurata adesso: lastBfW si aggiorna in requestAnimationFrame, che non gira nelle schede in background.
@@ -2072,7 +2091,7 @@ function compactMe(){const p=G.me;const base={v:2,nm:(S.nick||'Giocatore').slice
   if(!p||G.mode!=='online')return{...base,idle:1};
   // fw: larghezza del mio campo e delle mie carte in px, per capire da remoto quali carte si toccavano.
   const o={...base,fw:[Math.round(myBfW()),Math.round(cardW())],lf:p.life,ps:p.psn||0,ct:p.ct||0,lb:p.lib.length,hd:p.hand.length,tn:p.turn,rv:p.rv?p.hand.slice(0,12).map(vis):0,
-    bf:p.bf.map(packPerm),gc:p.gy.length,ec:p.ex.length};
+    bf:p.bf.map(packPerm),gc:p.gy.length,ec:p.ex.length,...(arrowLive(G.arrow)?{ar:packArrow(G.arrow,p)}:{})};
   // Se non ci sta: prima si accorcia il log, poi si lasciano fuori le carte più vecchie di cimitero ed esilio (i conteggi restano veri).
   let gy=p.gy.map(vis),ex=p.ex.map(vis);const t=teamPub();const fits=()=>{o.gy=gy.join(' ');o.ex=ex.join(' ');return utf8len(JSON.stringify({g:o,t}))<=PRESENCE_MAX};
   while(!fits()){if(o.lg.length>2)o.lg=o.lg.slice(1);else if(gy.length>8||ex.length>4){gy=gy.slice(-Math.max(8,gy.length-10));ex=ex.slice(-Math.max(4,ex.length-5))}else if(o.lg.length)o.lg=o.lg.slice(1);else if(o.bf.length)o.bf.pop();else break}
@@ -2148,7 +2167,7 @@ function renderTable(){
   const mez=$('#mez');mez.innerHTML='';
   if(!G.me){mez.innerHTML=`<div class="nog">Nessuna Partita in corso.<br><br><button class="btn pri" id="sg">Nuova Partita con il tuo Mazzo (${deckList().length} carte)</button></div>`;$('#sg').onclick=nextGameModal}
   else mez.appendChild(zoneEl(G.me,{owner:'me',live:true}));
-  renderOppOnly();renderLog();
+  renderOppOnly();renderLog();drawArrows();
 }
 // Su schermi larghi le carte del campo crescono con lo spazio; sotto i 1000 px vale la misura del CSS.
 // La mano cresce con loro, nella proporzione del CSS (--hw 88px con --bw 72px). Lo slider moltiplica entrambe.
@@ -2216,7 +2235,7 @@ function renderOppOnly(){
     else if(OPP.idle)oz.innerHTML=`<div class="nog"><b>${esc(OPP.nm)}</b> è al tavolo ma non ha ancora iniziato una Partita.</div>`;
     else{const rp=remoteToPlayer(OPP);oz.appendChild(zoneEl(rp,{owner:'opp',live:false,mirror:true}));spreadRemote(oz.querySelector('.bf'),rp.bf,rp.fw)}
   } else oz.innerHTML='<div class="nog" style="margin:0">Modalità goldfish: nessun avversario, prova le tue pescate e la tua curva.</div>';
-  renderLog();
+  renderLog();  drawArrows();
 }
 // Dati remoti: non fidarsi. Id sconosciuti diventano '?', le varianti tornano alla carta base.
 const fromVis=id=>BY[id]?(BY[id].b?{c:BY[id].b,v:id}:{c:id}):{c:'?'};
@@ -2300,7 +2319,7 @@ function bfCard(o,{mirror,mine,live}){
   const el=document.createElement('div');el.className='bc'+(o.tp?' tapped':'')+(o.atk?' atk':'')+(o.blk?' blk':'')+(o.sick&&isCreature(o)&&mine?' sick':'');
   const showFace=!o.fd||(mine&&live);el.appendChild(faceEl(o,{back:o.fd&&!(mine&&live)}));
   if(showFace&&o.c!=='?')setPreviewAttrs(el,o);if(o.fd&&mine&&live)el.firstChild.style.opacity='.55';
-  if(live){el.dataset.u=o.u;el.dataset.z='bf'}
+  if(live){el.dataset.u=o.u;el.dataset.z='bf'}else el.dataset.ru=o.u
   const bw=cardW(),bh=bw*CARD_H;
   el.style.left=`calc(${(o.x*100).toFixed(2)}% - ${bw/2}px)`;el.style.top=`calc(${((mirror?1-o.y:o.y)*100).toFixed(2)}% - ${bh/2}px)`;
   const bd=document.createElement('div');bd.className='badges';let h='';
@@ -2336,6 +2355,32 @@ function searchModal(p){openModal('Cerca nel grimorio',m=>{m.innerHTML='<input t
   const rd=()=>{const q=$('#sq').value.toLowerCase();const g=$('#sg2');g.innerHTML='';p.lib.filter(o=>(BY[o.c].n+' '+BY[o.c].t).toLowerCase().includes(q)).sort((a,b)=>BY[a.c].n.localeCompare(BY[b.c].n)).forEach(o=>{const c=document.createElement('div');c.className='mcell';const w=document.createElement('div');setPreviewAttrs(w,o);w.appendChild(faceEl(o));c.appendChild(w);const a=document.createElement('div');a.className='acts';
     [['Mano','hand'],['Campo','bf'],['Cima','libTop']].forEach(([l,z])=>{const b=document.createElement('button');b.className='btn sm';b.textContent=l;b.onclick=()=>{moveTo(p,o.u,z);rd()};a.appendChild(b)});c.appendChild(a);g.appendChild(c)})};
   $('#sq').oninput=rd;rd()},()=>{shuffle(p.lib);log(p,'Chiude la ricerca e mischia il grimorio');commit()})}
+
+// Frecce di bersaglio (issue #39). aimArrow tira la freccia dal mio lato (contro il Bot anche dal suo) e la scrive nel Registro.
+// Le carte si leggono come le vede chi gioca: una carta coperta resta coperta anche nel Registro.
+const sideP=side=>side==='me'?G.me:G.bot;
+function refName(r){if(r.player)return(r.side==='me'?G.me?.name:G.mode==='bot'?G.bot?.name:OPP?.nm)||'Avversario';
+  const o=r.side==='me'||G.mode==='bot'?find(sideP(r.side),r.u)?.o:remoteToPlayer(OPP||{}).bf[num(String(r.u).slice(1))];
+  return !o?'una carta':o.fd?'una carta coperta':cname(o)}
+function aimArrow(from,to){G.arrow={id:(G.arrow?.id||0)+1,ts:Date.now(),from,to};
+  log(sideP(from.side),`<b>${esc(refName(from))}</b> ha come bersaglio <b>${esc(refName(to))}</b>`);commit();setTimeout(()=>{drawArrows();publish()},ARROW_MS+50)}
+// Le frecce da disegnare: la mia, se è recente, e quella dell'avversario per ARROW_MS da quando la vedo arrivare (gli orologi dei
+// due computer possono essere diversi, quindi non si usa la sua ora).
+let REMOTE_AR={id:null,seen:0},arrowRAF=0;
+function liveArrows(){const out=[];if(arrowLive(G.arrow))out.push(G.arrow);
+  if(G.mode==='online'&&OPP&&!OPP.idle&&G.me){const r=readArrow(OPP.ar,G.me);
+    if(r){if(r.id!==REMOTE_AR.id)REMOTE_AR={id:r.id,seen:Date.now()};if(Date.now()-REMOTE_AR.seen<ARROW_MS)out.push(r)}}
+  return out}
+function arrowEnd(r){const z=r.side==='me'?'#mez':'#oppz';if(r.player)return document.querySelector(z+' .zname');
+  const k=CSS.escape(r.u);return document.querySelector(`${z} .bf [data-u="${k}"], ${z} .bf [data-ru="${k}"], ${z} [data-u="${k}"]`)}
+// Si ridisegna a ogni fotogramma finché ci sono frecce, così seguono lo scorrimento e i ridisegni del Tavolo.
+function drawArrows(){cancelAnimationFrame(arrowRAF);let svg=$('#arrows');const list=VIEW==='table'?liveArrows():[];
+  if(!list.length){if(svg)svg.remove();return}
+  if(!svg){document.body.insertAdjacentHTML('beforeend','<svg id="arrows" aria-hidden="true"></svg>');svg=$('#arrows')}
+  const mid=el=>{const r=el.getBoundingClientRect();return[r.left+r.width/2,r.top+r.height/2]};
+  svg.innerHTML='<defs><marker id="arhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>'+
+    list.map(a=>{const f=arrowEnd(a.from),t=arrowEnd(a.to);if(!f||!t)return'';const[x1,y1]=mid(f),[x2,y2]=mid(t);return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" marker-end="url(#arhead)"/><circle cx="${x1}" cy="${y1}" r="5"/>`}).join('');
+  arrowRAF=requestAnimationFrame(drawArrows)}
 
 /* 81-input.js */
 let drag=null,lpT=null;
@@ -2386,13 +2431,14 @@ document.addEventListener('contextmenu',e=>{if(VIEW!=='table')return;const z=e.t
   if(el)cardMenu(p,el.dataset.u,e.clientX,e.clientY);else libMenu(p,e.clientX,e.clientY)});
 function cardMenu(p,u,x,y){const f=find(p,u);if(!f)return;const o=f.o;const done=fn=>()=>{fn();commit()};const zoom=['Ingrandisci',()=>showZoom(o,document.querySelector(`.zone[data-live="1"] [data-u="${CSS.escape(u)}"]`),{text:true})];
   const mv=[['In mano',done(()=>moveTo(p,u,'hand'))],['Nel cimitero',done(()=>moveTo(p,u,'gy'))],['In esilio',done(()=>moveTo(p,u,'ex'))],['In cima al grimorio',done(()=>moveTo(p,u,'libTop'))],['In fondo al grimorio',done(()=>moveTo(p,u,'libBot'))]];
-  if(f.z==='bf'){openMenu(x,y,[zoom,'-',[o.tp?'Stappa':'Tappa',done(()=>{o.tp=!o.tp}),'T'],[o.atk?'Togli da attacco':'Segna in attacco',done(()=>{o.atk=!o.atk;if(o.atk){o.blk=false;if(!kw(o,'Vigilance'))o.tp=true}})],
+  const aim=['Bersaglio…',()=>startTarget(p,u)];
+  if(f.z==='bf'){openMenu(x,y,[zoom,aim,'-',[o.tp?'Stappa':'Tappa',done(()=>{o.tp=!o.tp}),'T'],[o.atk?'Togli da attacco':'Segna in attacco',done(()=>{o.atk=!o.atk;if(o.atk){o.blk=false;if(!kw(o,'Vigilance'))o.tp=true}})],
     // Chi blocca chi si mostra trascinando il bloccante davanti all'attaccante (issue #38).
     [o.blk?'Togli dal blocco':'Segna in blocco',done(()=>{o.blk=!o.blk;if(o.blk){o.atk=false;log(p,`Blocca con <b>${esc(cname(o))}</b>`)}})],'-',
     ['Segnalino +1/+1',done(()=>o.p1=(o.p1||0)+1)],['Segnalino −1/−1',done(()=>o.p1=(o.p1||0)-1)],['Segnalino / fedeltà +1',done(()=>o.n=(o.n||0)+1)],['Segnalino / fedeltà −1',done(()=>o.n=(o.n||0)-1)],
     [o.prep?'Non più preparata':'Preparata',done(()=>{o.prep=!o.prep;log(p,`<b>${esc(cname(o))}</b> ${o.prep?'è preparata':'non è più preparata'}`)})],[o.fd?'Gira a faccia in su':'Gira a faccia in giù',done(()=>o.fd=!o.fd)],
     ['Crea una copia (pedina)',()=>mkToken(p,{c:o.c,v:o.v,tn:o.tn,pt:o.pt})],'-',...mv.filter(m=>m[0]!=='In campo')])}
-  else if(f.z==='hand'){openMenu(x,y,[zoom,'-',['Gioca',done(()=>moveTo(p,u,'bf'))],['Gioca a faccia in giù',done(()=>moveTo(p,u,'bf',{fd:true}))],['Rivela',done(()=>log(p,`Rivela <b>${esc(cname(o))}</b>`))],'-',...mv.filter(m=>m[0]!=='In mano')])}
+  else if(f.z==='hand'){openMenu(x,y,[zoom,aim,'-',['Gioca',done(()=>moveTo(p,u,'bf'))],['Gioca a faccia in giù',done(()=>moveTo(p,u,'bf',{fd:true}))],['Rivela',done(()=>log(p,`Rivela <b>${esc(cname(o))}</b>`))],'-',...mv.filter(m=>m[0]!=='In mano')])}
 }
 function libMenu(p,x,y){openMenu(x,y,[['Pesca 1',()=>{draw(p);commit()},'D'],['Pesca 7',()=>{draw(p,7);commit()}],['Guarda le prime 1 (scruta 1)',()=>scryModal(p,1)],['Guarda le prime 2',()=>scryModal(p,2)],['Guarda le prime 3',()=>scryModal(p,3)],['Guarda le prime 5',()=>scryModal(p,5)],['Cerca nel grimorio',()=>searchModal(p)],'-',
   ['Macina 1',()=>{const o=p.lib.shift();if(o){p.gy.push(o);log(p,`Macina <b>${esc(cname(o))}</b>`)}commit()}],['Rivela la cima',()=>{const o=p.lib[0];if(o)log(p,`Rivela la cima: <b>${esc(cname(o))}</b>`);commit()}],['Mischia',()=>{shuffle(p.lib);log(p,'Mischia il grimorio');commit()}]])}
@@ -2403,6 +2449,17 @@ document.addEventListener('keydown',e=>{if(VIEW!=='table'||!G.me||e.target.close
   if(k==='d'){draw(G.me);commit()}else if(k==='u'){G.me.bf.forEach(o=>{o.tp=false;o.atk=false;o.blk=false});log(G.me,'Stappa tutto');commit()}
   else if(k==='t'&&hoverU){for(const p of [G.me,G.bot]){const o=p&&p.bf.find(o=>o.u===hoverU);if(o){o.tp=!o.tp;commit();break}}}});
 window.addEventListener('resize',()=>{if(VIEW==='table'&&!drag){renderTable();publish()}});
+// Frecce di bersaglio (issue #39): «Bersaglio…» sul menu di una carta, poi un clic su una carta sul campo, mia o
+// dell'avversario, o sulla barra di un giocatore. Il clic che sceglie non fa altro: niente presa, tappo o pulsanti.
+let TARGET=null,swallowClick=false;
+function startTarget(p,u){TARGET={from:{side:p===G.me?'me':'opp',u}};document.body.classList.add('targeting');toast('Scegli il bersaglio: una carta sul campo o un giocatore (Esc annulla)')}
+function endTarget(){TARGET=null;document.body.classList.remove('targeting')}
+function targetRef(el){const z=el.closest('.zone');if(!z)return null;const side=z.dataset.owner==='me'?'me':'opp';
+  const c=el.closest('.bf [data-u], .bf [data-ru]');if(c)return{side,u:c.dataset.u||c.dataset.ru};return el.closest('.zbar')?{side,player:true}:null}
+document.addEventListener('pointerdown',e=>{if(!TARGET)return;e.stopPropagation();e.preventDefault();swallowClick=true;
+  const from=TARGET.from,to=targetRef(e.target);endTarget();if(to&&VIEW==='table'&&G.me)aimArrow(from,to);else toast('Bersaglio annullato')},true);
+document.addEventListener('click',e=>{if(swallowClick){swallowClick=false;e.stopPropagation();e.preventDefault()}},true);
+document.addEventListener('keydown',e=>{if(TARGET&&e.key==='Escape'){endTarget();toast('Bersaglio annullato')}},true);
 
 /* 99-boot.js */
 // Con una Partita aperta si riparte dal Tavolo: l'Apertura e il Mazzo sono bloccati.
