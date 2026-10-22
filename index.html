@@ -269,6 +269,7 @@ input[type=text],input[type=search],input[type=number],select,textarea{backgroun
 .mscore{font:600 12.5px var(--mono);letter-spacing:.02em;padding:4px 9px;border-radius:6px;background:var(--surface2);border:1px solid var(--line)}
 .mscore.won{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 .mscore.lost{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.mscore.drawn{color:var(--ember);border-color:color-mix(in srgb,var(--ember) 45%,transparent)}
 .mgrid>.nog,.mgrid>.muted{grid-column:1/-1}
 details>summary{cursor:pointer}
 .savedas{font-size:12.5px;color:var(--muted);max-width:26ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1274,7 +1275,7 @@ function deckDirty(){syncLay();const s=findSave(S.saveId);return !s||JSON.string
 // Carte del Mazzo che un nuovo kit cancellerebbe: 0 se il Mazzo è vuoto o salvato così com'è (si ritrova in «Mazzi salvati»).
 function kitLoss(){const n=S.deck.length+Object.values(S.basics||{}).reduce((a,b)=>a+b,0);return n&&deckDirty()?n:0}
 // s: punteggio di un Match finito (matchScore); sign -1 quando si annulla.
-function deckStat(id,s,sign){const d=findSave(id);if(!d)return;const t=d.st;t[s.won?'mw':'ml']+=sign;t.gw+=sign*s.w;t.gl+=sign*s.l;persistSaves()}
+function deckStat(id,s,sign){const d=findSave(id);if(!d)return;const t=d.st,k=s.won?'mw':s.drawn?'md':'ml';t[k]=(t[k]||0)+sign;t.gw+=sign*s.w;t.gl+=sign*s.l;persistSaves()}
 function exportDeck(id){const s=findSave(id);const {st,...rest}=s;const bytes=new TextEncoder().encode(JSON.stringify(rest));
   let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));return 'MTGLAB1:'+btoa(bin)}
 // Il Mazzo come file .dck di Forge: una riga «N Nome|SET» per carta, con il nome della prima faccia come nel set di Forge.
@@ -1661,7 +1662,7 @@ function savesModal(){let armed=null;
     const L=$('#svlist');if(!SAVES.length)L.innerHTML='<div class="nog" style="margin:0">Nessun Mazzo salvato.</div>';
     SAVES.forEach(s=>{const r=document.createElement('div');r.className='saverow'+(s.id===S.saveId?' cur':'');const nb=COLORS.reduce((a,k)=>a+(s.basics[k]||0),0);const st=s.st;
       r.innerHTML=`<div class="sv1"><b>${esc(s.name)}</b> ${deckColors(s.pool,s.deck).map(k=>`<span class="ms ${k}"></span>`).join('')}${s.id===S.saveId?' <span class="chip on">in uso</span>':''}</div>
-        <div class="sv2 muted">${s.deck.length+nb} carte · Sideboard ${sideboard(s).length} · kit ${esc(kitName(s.seed))}${s.team?' · '+seatName(s.seat||0):''} · ${new Date(s.ts).toLocaleString('it-IT',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}${st.mw+st.ml?` · Match ${st.mw}-${st.ml} (Partite ${st.gw}-${st.gl})`:''}</div>
+        <div class="sv2 muted">${s.deck.length+nb} carte · Sideboard ${sideboard(s).length} · kit ${esc(kitName(s.seed))}${s.team?' · '+seatName(s.seat||0):''} · ${new Date(s.ts).toLocaleString('it-IT',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}${st.mw+st.ml+(st.md||0)?` · Match ${st.mw}-${st.ml}${st.md?'-'+st.md:''} (Partite ${st.gw}-${st.gl})`:''}</div>
         <div class="row"></div>`;
       const acts=r.querySelector('.row');const B=(l,f,cls='')=>{const b=document.createElement('button');b.className='btn sm '+cls;b.textContent=l;b.onclick=f;acts.appendChild(b)};
       const loadKey='load'+s.id,delKey='del'+s.id;
@@ -1850,7 +1851,7 @@ let G=LS.get('mtg-lab:fra-game-v1',LS.get('fra-game-v1',null))||{mode:'bot',me:n
 // Il Match sopravvive alle Partite: res = risultati dal mio punto di vista (W/L/D), bot = codice del kit del bot.
 // hg: Two-Headed Giant allenato 1 contro 1, cioè 30 vite, primo mulligan gratis e una Partita sola (bo 1).
 G.match=G.match&&typeof G.match.res==='string'?G.match:{res:''};G.match.hg=G.match.hg?1:0;G.match.bo=G.match.bo===1||G.match.hg?1:3;
-G.tally=G.tally||{w:0,l:0}; // Match vinti e persi da quando hai azzerato il bilancio
+G.tally=G.tally||{w:0,l:0}; // Match vinti, persi e pareggiati (d) da quando hai azzerato il bilancio
 // gn: numero della Partita in corso nel Match. È aperta finché nessuno ne ha segnato il risultato.
 // Salvataggi di prima di gn: il numero si ricava dall'ultima riga «Partita N del Match» del registro.
 if(G.gn==null){const m=G.log.map(l=>/^Partita (\d+) del Match/.exec(l.tx)).filter(Boolean).pop();G.gn=m?+m[1]:G.match.res.length+(G.me?1:0)}
@@ -1910,10 +1911,10 @@ const scoreText=(r=G.match.res)=>{const s=mScore(r);return `${s.w}-${s.l}${s.d?'
 // fmt: formato del nuovo Match (1, 3 o 'hg'), usato solo quando comincia un Match.
 function startGame(first,fmt){
   const list=deckList();if(!list.length){toast('Il Mazzo è vuoto: costruiscilo prima');go('deck');return}
-  const match=G.match;if(mScore().over){match.res='';match.bot=null}
+  const match=G.match;if(mScore().over){match.res='';match.bot=null;delete match.tm;delete match.tx}
   if(!match.res&&fmt){match.hg=fmt==='hg'?1:0;match.bo=match.hg?1:fmt}
   const coin=!first;const nick=S.nick||'Tu';G={mode:G.mode||'bot',gid:Date.now().toString(36),log:[],first:first||(Math.random()<.5?'me':'bot'),match,tally:G.tally,me:mkPlayer(nick,list),bot:null,seed:S.seed};
-  const gn=G.gn=match.res.length+1;
+  const gn=G.gn=match.res.length+1;roundStart(match);
   log(null,`Partita ${gn} del Match ${match.hg?'Two-Headed Giant (una Partita, 30 vite, primo mulligan gratis)':'al meglio di '+match.bo}${match.res?' ('+scoreText()+')':''}. Mazzo di ${list.length} carte${list.length<40?' (meno di 40!)':''}.`);
   const who1=G.mode==='bot'?(G.first==='me'?'Inizi tu':'Inizia il bot'):(G.first==='me'?'Vai per primo':'Vai per secondo');
   if(G.mode==='bot'){match.bot=match.bot||'BOT-'+Math.random().toString(36).slice(2,8);const k=makeKit(match.bot);const b=autoBuild(k.pool,GIH_?.w);const byU=byUid(k.pool);
@@ -1923,12 +1924,15 @@ function startGame(first,fmt){
   commit();
 }
 // Match finiti in questa sessione di gioco e, se il Mazzo è salvato, nel suo storico (±1 per annullare).
-function countMatch(res,sign){const s=mScore(res);if(!s.over)return;const t=G.tally;t[s.won?'w':'l']+=sign;deckStat(S.saveId,s,sign)}
+function countMatch(res,sign){const s=mScore(res);if(!s.over)return;const t=G.tally,k=s.won?'w':s.drawn?'d':'l';t[k]=(t[k]||0)+sign;deckStat(S.saveId,s,sign)}
 // Fine della Partita: r = 'W' vinta, 'L' persa, 'D' pareggio.
 function recordResult(r){const m=G.match;if(mScore().over){toast('Il Match è già finito: inizia una nuova Partita per un nuovo Match');return}
   m.res+=r;const s=mScore();countMatch(m.res,1);
   log(G.me,`${{W:'Vince',L:'Perde',D:'Pareggia'}[r]} la Partita ${m.res.length}. Match ${scoreText()}${s.over?(s.won?': <b>Match vinto!</b>':': Match perso'):''}`);commit()}
 function undoResult(){const m=G.match;if(!m.res)return;countMatch(m.res,-1);m.res=m.res.slice(0,-1);G.gn=Math.min(G.gn,m.res.length+1);log(G.me,`Annulla l'ultimo risultato. Match ${scoreText()}`);commit()}
+// Chiudi il Match (issue #35): finisce con il punteggio che ha, per esempio a tempo scaduto. Si annulla come un risultato.
+function closeMatch(){const m=G.match;if(mScore().over)return;m.res+='C';const s=mScore();countMatch(m.res,1);
+  log(G.me,`Chiude il Match: ${s.won?'vinto':s.drawn?'pareggiato':'perso'} ${scoreText()}`);commit()}
 function newMatch(){G.match={res:'',bo:G.match.bo,hg:G.match.hg};G.gn=0;tableLog('Nuovo Match: punteggio azzerato.');commit()}
 // Annulla (issue #37): commit() tiene l'istantanea dei giocatori di prima di ogni azione che li cambia, fino a UNDO_MAX, solo per la
 // Partita in corso (key: gid e numero della Partita). Contro il Bot ci sono anche le sue carte, che muovi tu. last è lo stato dopo
@@ -1989,6 +1993,61 @@ function syncControl(opp){if(!G.me||G.mode!=='online'||!opp||opp.idle)return fal
 // Chi possiede una carta controllata dall'altro, scritto sulla carta: null se la controlla il proprietario.
 // bor: una mia carta sul campo remoto dell'avversario.
 function ctlLabel(o){if(o.bor)return'tua';if(o.gid)return'di '+(OPP?.nm||'avversario');if(o.own)return o.own==='me'?'tua':'del '+(G.bot?.name||'Bot');return null}
+
+/* 53-tempo.js */
+// Timer del turno di gioco (issue #33). Al prerelease ogni turno di gioco dura 50 minuti (consiglio WPN, minimo 40); allo
+// scadere il giocatore attivo finisce il turno e poi si giocano 5 turni in tutto, 3 nel Two-Headed Giant (MTR App. B, 2.4).
+// Parte con la Partita 1 e copre tutto il Match: sta in G.match.tm = {dur, v, run, left, at}, dove left è il tempo rimasto
+// all'ora at (di questo computer) e, se run, scende da lì. Avvisa e basta, come il timer di costruzione.
+// Online è lo stesso orologio sui due schermi: ogni azione alza la versione v, che passa nella presence con run, left e dur.
+// Chi riceve una versione più alta la prende e conta da quando la riceve, così l'ora dell'altro computer non serve.
+// v ha una piccola parte casuale: due azioni nello stesso istante non pareggiano, e vince la stessa sulle due pagine.
+const ROUND_KEY='mtg-lab:tempo-turno';
+// Preferenze di chi guarda: off spegne il timer contro il Bot e in Goldfish (online c'è sempre), min è la durata.
+let ROUND_PREF={off:false,min:50,...LS.get(ROUND_KEY,{})};
+const setRoundPref=p=>{ROUND_PREF={...ROUND_PREF,...p};LS.set(ROUND_KEY,ROUND_PREF)};
+const tmNextV=v=>Math.floor(v||0)+1+Math.random()/1000;
+const tmNew=(dur,now,v=0)=>({dur,v:tmNextV(v),run:true,left:dur,at:now});
+const tmLeft=(t,now)=>t.run?t.left-(now-t.at):t.left;
+const tmToggle=(t,now)=>({...t,v:tmNextV(t.v),run:!t.run,left:tmLeft(t,now),at:now});
+// min in minuti, tra 1 e 180: il tempo già passato resta passato.
+function tmSetDur(t,min,now){const m=Math.round(+min),dur=(isNaN(m)?50:Math.max(1,Math.min(180,m)))*MIN;
+  return{...t,v:tmNextV(t.v),dur,left:tmLeft(t,now)+dur-t.dur,at:now}}
+const tmPack=t=>[t.v,t.run?1:0,Math.round(t.left),t.dur];
+// All'inizio del Match (Partita 1): parte, se non è spento. Online parte sempre.
+function roundStart(m,now=Date.now()){if(!m.tm&&(G.mode==='online'||!ROUND_PREF.off))m.tm=tmNew(ROUND_PREF.min*MIN,now)}
+// Il timer dell'avversario (opp: la sua presence), se ha una versione più nuova: true se l'ho preso.
+function roundSync(opp,now=Date.now()){const a=opp&&Array.isArray(opp.tm)?opp.tm:null;if(!a||G.mode!=='online'||!G.match)return false;
+  const v=+a[0];if(!(v>(G.match.tm?.v||0)))return false;
+  const dur=Math.max(MIN,Math.min(180*MIN,num(a[3])||50*MIN));
+  G.match.tm={dur,v,run:!!a[1],left:Math.max(-180*MIN,Math.min(dur,num(a[2]))),at:now};return true}
+const oppTurn=()=>G.mode==='bot'?G.bot?.turn||0:G.mode==='online'&&OPP&&!OPP.idle?num(OPP.tn):0;
+// Stato del timer: tempo rimasto, scaduto, turni extra. Allo scadere ricorda i turni dei due giocatori (tx), e da lì si contano
+// gli extra: il turno in corso è lo 0, poi ogni «Nuovo turno» di uno dei due ne conta uno. over: i turni extra sono finiti.
+function roundCheck(now=Date.now()){const m=G.match,t=m?.tm;if(!t)return null;const left=tmLeft(t,now),expired=left<=0;let extra=null;
+  if(expired&&G.me){if(!m.tx||m.tx.gid!==G.gid)m.tx={gid:G.gid,me:G.me.turn,opp:oppTurn()};
+    const done=G.me.turn-m.tx.me+oppTurn()-m.tx.opp,total=m.hg?3:5;extra={done,total,over:done>total}}
+  return{left,run:t.run,expired,extra}}
+
+/* interfaccia: il chip nella barra del Match e il suo menu */
+// Avvisi una volta sola per Match (tw): a 5 minuti dalla fine, allo scadere, a turni extra finiti.
+function paintRound(){const c=$('#rtchip'),m=G.match;if(!c||!m.tm||mScore().over)return;const s=roundCheck(),x=s.extra;
+  c.textContent=!s.expired?(s.run?'':'In pausa ')+timerFmt(s.left):!x?'Tempo':x.over?'Turni extra finiti':x.done?`Tempo · turno extra ${x.done} di ${x.total}`:'Tempo · finisci il turno';
+  c.className='chip timer '+(s.expired?'bad':s.left<=5*MIN?'warn':s.run?'on':'');
+  c.title=s.expired?`Tempo scaduto: si finisce il turno in corso e poi si giocano ${m.hg?3:5} turni in tutto, contando quelli dei due giocatori. Clic per le opzioni`:'Tempo del turno di gioco rimasto per il Match. Clic per pausa e durata';
+  const say=(k,t)=>{if((m.tw||[]).includes(k))return;m.tw=[...(m.tw||[]),k];toast(t)};
+  if(s.run&&!s.expired&&s.left<=5*MIN)say('5','Mancano 5 minuti alla fine del turno di gioco');
+  if(s.expired)say('0',`Tempo: finite il turno in corso, poi ${m.hg?3:5} turni extra in tutto`);
+  if(x?.over&&!mScore().over)say('x','Turni extra finiti: chiudi il Match con il punteggio che ha (menu del timer o Fine Partita)')}
+function roundMenu(){const c=$('#rtchip'),r=c.getBoundingClientRect(),m=G.match,t=m.tm,now=Date.now();
+  if(!t){openMenu(r.left,r.bottom+4,[[`Accendi il timer (${ROUND_PREF.min} minuti)`,()=>{setRoundPref({off:false});m.tm=tmNew(ROUND_PREF.min*MIN,now);commit()}]]);return}
+  const dur=Math.round(t.dur/MIN);
+  openMenu(r.left,r.bottom+4,[
+    ...(roundCheck(now).expired&&!mScore().over?[['Chiudi il Match con questo punteggio',closeMatch],'-']:[]),
+    [t.run?'Pausa':'Riprendi',()=>{m.tm=tmToggle(t,Date.now());commit()}],
+    ...[40,50,60].map(n=>[`${n} minuti${n===dur?' ✓':''}`,()=>{m.tm=tmSetDur(m.tm,n,Date.now());setRoundPref({min:n});commit()}]),
+    ...(G.mode!=='online'?['-',['Spegni il timer',()=>{delete m.tm;delete m.tx;setRoundPref({off:true});commit()}]]:[])])}
+function initRound(){setInterval(paintRound,1000)}
 
 /* 60-bot.js */
 function landsOf(p){return p.bf.filter(o=>o.c!=='x'&&isLand(o.c)&&!o.tp)}
@@ -2140,6 +2199,8 @@ function compactMe(){const p=G.me;const base={v:2,nm:(S.nick||'Giocatore').slice
   const o={...base,fw:[Math.round(myBfW()),Math.round(cardW())],lf:p.life,ps:p.psn||0,ct:p.ct||0,lb:p.lib.length,hd:p.hand.length,tn:p.turn,rv:p.rv?p.hand.slice(0,12).map(vis):0,
     bf:shownBf(p).map(packPerm),gc:p.gy.length,ec:p.ex.length,
     // Carte date all'avversario e carte sue ridate (issue #40).
+    // Il timer del turno (issue #33).
+    ...(G.match?.tm?{tm:tmPack(G.match.tm)}:{}),
     ...(p.bf.some(o=>o.gv)?{gv:p.bf.filter(o=>o.gv).map(o=>[o.gv,...packPerm(o)])}:{}),...(G.rt?.length?{rt:G.rt.slice(-40)}:{}),...(arrowLive(G.arrow)?{ar:packArrow(G.arrow,p)}:{})};
   // Se non ci sta: prima si accorcia il log, poi si lasciano fuori le carte più vecchie di cimitero ed esilio (i conteggi restano veri).
   let gy=p.gy.map(vis),ex=p.ex.map(vis);const t=teamPub();const fits=()=>{o.gy=gy.join(' ');o.ex=ex.join(' ');return utf8len(JSON.stringify({g:o,t}))<=PRESENCE_MAX};
@@ -2150,7 +2211,9 @@ let pubT;function publish(){if(!ROOM)return;clearTimeout(pubT);pubT=setTimeout((
   ROOM.presence(pr).then(()=>{publish.last=js;if(publish.err){publish.err=null;roomChip()}},e=>{publish.err=e?.code||'errore';roomChip()})},120)}
 // Risultati del Match dal mio punto di vista: W vinta, L persa, D pareggio. Al meglio di 3 vince chi arriva a 2, al meglio di 1 chi vince una Partita.
 const mirrorRes=r=>String(r).replace(/[WL]/g,x=>x==='W'?'L':'W');
-function matchScore(r,bo=3){const c=k=>[...String(r)].filter(x=>x===k).length;const w=c('W'),l=c('L'),need=bo===1?1:2;return{w,l,d:c('D'),over:w>=need||l>=need,won:w>=need}}
+// Una C in fondo vuol dire Match chiuso a mano con il punteggio che ha (issue #35): vinto, perso o pareggiato (drawn).
+function matchScore(r,bo=3){const s=String(r),c=k=>[...s].filter(x=>x===k).length;const w=c('W'),l=c('L'),need=bo===1?1:2,closed=s.endsWith('C');
+  return{w,l,d:c('D'),over:w>=need||l>=need||closed,won:closed?w>l:w>=need,drawn:closed&&w===l}}
 function initRoom(){
   // La Stanza la prepara lo script caricato prima dell'app: web/mqtt-room.js, o dev/mock-room.js in dev.html.
   const chip=$('#roomchip'),room=window.STANZA||null;
@@ -2179,7 +2242,7 @@ function peersChanged(timer){const before=peerIds();
   const playing=roomPeers.filter(p=>!p.presence.g.idle),others=playing.filter(p=>!p.isMe),mine=roomPeers.find(p=>p.peer===oppPeer)?.isMe;
   if(!oppPicked&&others.length===1&&(!oppPeer||mine))oppPeer=others[0].peer;else if(!oppPeer&&playing.length===1)oppPeer=playing[0].peer;
   const cur=roomPeers.find(p=>p.peer===oppPeer);OPP=cur?cur.presence.g:null;
-  if(syncControl(OPP)&&!drag)commit();
+  const ctl=syncControl(OPP),tm=roundSync(OPP);if((ctl||tm)&&!drag)commit();
   syncMatch();roomChip();
   // La barra della modalità si ridisegna solo se cambia ciò che mostra (avversari, risultati), per non rubare i clic.
   const mbKey=JSON.stringify([oppPeer,OPP?.ms,OPP?.bo,OPP?.hg,roomPeers.map(p=>p.presence.g.nm)]);
@@ -2196,7 +2259,7 @@ function roomChip(){const chip=$('#roomchip');if(!chip)return;
 // Se l'avversario registra il risultato di una Partita che io non ho ancora segnato, lo prendo speculare.
 // Si guarda solo quando il suo valore cambia, così «Annulla ultimo risultato» non viene subito ricopiato.
 let lastOppMs=null;
-function syncMatch(){if(!OPP||typeof OPP.ms!=='string'||!/^[WLD]{0,9}$/.test(OPP.ms)||OPP.ms===lastOppMs)return;lastOppMs=OPP.ms;
+function syncMatch(){if(!OPP||typeof OPP.ms!=='string'||!/^[WLD]{0,9}C?$/.test(OPP.ms)||OPP.ms===lastOppMs)return;lastOppMs=OPP.ms;
   const theirs=mirrorRes(OPP.ms),mine=G.match.res;
   if(theirs.length>mine.length&&theirs.startsWith(mine)){const was=mScore().over;G.match.res=theirs;if(!was)countMatch(theirs,1);log(null,`${esc(OPP.nm||'L\'avversario')} ha registrato il risultato: Match ${scoreText()}`);commit()}}
 function renderTableIfOpen(){if(VIEW==='table')renderTable()}
@@ -2241,17 +2304,21 @@ function renderModebar(){
     const i=m.querySelector('input');setTimeout(()=>{i.focus();i.select()})})));
   $('#opsel')&&($('#opsel').onchange=e=>{oppPeer=e.target.value||null;oppPicked=!!oppPeer;const c=roomPeers.find(p=>p.peer===oppPeer);OPP=c?c.presence.g:null;renderOppOnly()});
   $('#ng')&&($('#ng').onclick=nextGameModal);
+  $('#rtchip')&&($('#rtchip').onclick=roundMenu);paintRound();
   $('#endg')&&($('#endg').onclick=()=>{const r=$('#endg').getBoundingClientRect();const done=fn=>()=>{fn();nextGameModal()};
     openMenu(r.left,r.bottom+4,[...(G.me?[['Ho vinto la Partita',done(()=>recordResult('W'))],['Ho perso la Partita',done(()=>recordResult('L'))],['Pareggio',done(()=>recordResult('D'))],'-']:[]),
-      ...(G.match.res?[["Annulla l'ultimo risultato",undoResult]]:[]),['Nuovo Match (azzera)',newMatch],...(G.tally.w+G.tally.l?[['Azzera il bilancio dei Match',()=>{G.tally={w:0,l:0};commit()}]]:[])])});
+      ...(!mScore().over&&(G.me||G.match.res)?[['Chiudi il Match con questo punteggio',closeMatch]]:[]),
+      ...(G.match.res?[["Annulla l'ultimo risultato",undoResult]]:[]),['Nuovo Match (azzera)',newMatch],...(G.tally.w+G.tally.l+(G.tally.d||0)?[['Azzera il bilancio dei Match',()=>{G.tally={w:0,l:0,d:0};commit()}]]:[])])});
 }
 // Punteggio del Match, formato e bilancio dei Match finiti; comandi di fine Partita.
 function matchBarHTML(){const res=G.match.res,bo=G.match.bo,s=mScore();const gn=res.length+(s.over?0:1);
   const opp=G.mode==='online'&&OPP&&typeof OPP.ms==='string'?mirrorRes(OPP.ms):null;const diff=opp!==null&&opp!==res&&!(opp.length<res.length&&res.startsWith(opp));
   const oppFmt=OPP?fmtName({hg:OPP.hg?1:0,bo:OPP.bo===1?1:3}):'',fmt=fmtName(),boDiff=G.mode==='online'&&OPP&&!OPP.idle&&oppFmt!==fmt;
-  const lbl=s.over?`${fmt} · Match ${s.won?'vinto':'perso'} ${scoreText()}`:`${fmt} · Match ${scoreText()}${gn?` · Partita ${gn}`:''}`;
+  const lbl=s.over?`${fmt} · Match ${s.won?'vinto':s.drawn?'pareggiato':'perso'} ${scoreText()}`:`${fmt} · Match ${scoreText()}${gn?` · Partita ${gn}`:''}`;
   const t=G.tally;
-  return `<span class="mscore${s.over?(s.won?' won':' lost'):''}" title="${G.match.hg?'Two-Headed Giant: una Partita decide il Match, 30 vite, primo mulligan gratis':bo===1?'Al meglio di 1: una Partita decide il Match':'Al meglio di 3: vince chi arriva a 2 Partite'}">${lbl}</span>${t.w+t.l?`<span class="muted mono" style="font-size:12px" title="Match finiti da quando hai azzerato il bilancio">Bilancio ${t.w}-${t.l}</span>`:''}
+  // Il timer del turno (issue #33): il testo lo scrive paintRound ogni secondo.
+  const rt=!s.over&&(G.me||res)?(G.match.tm?'<button class="chip timer" id="rtchip"></button>':G.mode!=='online'?'<button class="chip timer" id="rtchip" title="Timer del turno spento: clic per accenderlo">Timer spento</button>':''):'';
+  return `${rt}<span class="mscore${s.over?(s.won?' won':s.drawn?' drawn':' lost'):''}" title="${G.match.hg?'Two-Headed Giant: una Partita decide il Match, 30 vite, primo mulligan gratis':bo===1?'Al meglio di 1: una Partita decide il Match':'Al meglio di 3: vince chi arriva a 2 Partite'}">${lbl}</span>${t.w+t.l+(t.d||0)?`<span class="muted mono" style="font-size:12px" title="Match vinti, persi e pareggiati da quando hai azzerato il bilancio">Bilancio ${t.w}-${t.l}${t.d?'-'+t.d:''}</span>`:''}
     ${diff?`<span class="chip warn" title="Il risultato registrato dall'avversario non coincide con il tuo">Avversario: ${esc(scoreText(opp))}</span>`:''}${boDiff?`<span class="chip warn" title="Scegliete lo stesso formato all'inizio del Match">Avversario: ${oppFmt}</span>`:''}
     ${G.me?'<button class="btn" id="endg">Fine Partita ▾</button>':res?'<button class="btn" id="endg" title="Annulla l’ultimo risultato o ricomincia il Match">Match ▾</button>':''}${gameOpen()?`<button class="btn" id="ng" title="Rimescola e ricomincia la Partita ${gn} senza segnare un risultato">Ricomincia</button>`:`<button class="btn${G.me?'':' pri'}" id="ng">${s.over||!res?'Nuova Partita':'Sideboard e prossima Partita'}</button>`}`}
 // Tra una Partita e l'altra: scambi tra Mazzo e Sideboard, con lo stesso costruttore della scheda Mazzo (restano nel Mazzo attuale),
@@ -2520,6 +2587,6 @@ document.addEventListener('keydown',e=>{if(TARGET&&e.key==='Escape'){endTarget()
 
 /* 99-boot.js */
 // Con una Partita aperta si riparte dal Tavolo: l'Apertura e il Mazzo sono bloccati.
-loadPacks();if(gameOpen())go('table');else renderAll();initRoom();initTimer();
+loadPacks();if(gameOpen())go('table');else renderAll();initRoom();initTimer();initRound();
 
 </script>
